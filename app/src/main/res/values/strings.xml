@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FloatingButtonApp</string>
+    <string name="accessibility_service_label">키보드 감지 서비스</string>
+    <string name="accessibility_service_description">이 서비스는 키보드가 표시되는 것을 감지하여 플로팅 버튼을 자동으로 위치시킵니다.</string>
+</resources>
