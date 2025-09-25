@@ -60,6 +60,7 @@
         <!-- OCR 결과 표시 및 편집 액티비티 (BottomSheet 스타일) -->
         <activity
             android:name=".OcrBottomSheetActivity"
+            android:launchMode="singleTop"
             android:exported="false"
             android:theme="@style/Theme.Transparent.BottomSheet"
             android:windowSoftInputMode="adjustResize|stateHidden"
