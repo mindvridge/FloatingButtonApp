@@ -38,6 +38,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.FloatingButtonApp"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
         <!-- ML Kit OCR 메타데이터 (한국어 포함) -->

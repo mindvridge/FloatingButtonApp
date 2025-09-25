@@ -1,8 +1,10 @@
 package com.mv.floatingbuttonapp
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -43,6 +45,7 @@ data class PermissionInfo(
 class MainActivity : ComponentActivity() {
 
     private lateinit var mediaProjectionManager: MediaProjectionManager
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // MediaProjection 권한 요청 런처
     private val mediaProjectionLauncher = registerForActivityResult(
@@ -56,8 +59,8 @@ class MainActivity : ComponentActivity() {
 
                 Toast.makeText(this, "화면 캡처 권한이 허용되었습니다", Toast.LENGTH_SHORT).show()
 
-                // 서비스 시작
-                checkAndStartService()
+                // 서비스 재시작 (MediaProjection 확실히 업데이트)
+                restartFloatingService()
             }
         } else {
             Toast.makeText(
@@ -256,6 +259,44 @@ class MainActivity : ComponentActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
+    }
+
+    private fun updateFloatingService() {
+        // 서비스가 실행 중이면 MediaProjection 업데이트
+        val serviceIntent = Intent(this, FloatingButtonService::class.java)
+        val serviceRunning = isServiceRunning(FloatingButtonService::class.java)
+        
+        if (serviceRunning) {
+            // 서비스에 MediaProjection 업데이트 요청
+            serviceIntent.action = "UPDATE_MEDIA_PROJECTION"
+            startService(serviceIntent)
+        } else {
+            // 서비스가 실행 중이 아니면 시작
+            startFloatingService()
+        }
+    }
+
+    private fun restartFloatingService() {
+        // 기존 서비스 중지
+        val stopIntent = Intent(this, FloatingButtonService::class.java)
+        stopService(stopIntent)
+        
+        // 잠시 대기 후 새로 시작
+        handler.postDelayed({
+            startFloatingService()
+        }, 500)
+    }
+
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val services = activityManager.getRunningServices(Integer.MAX_VALUE)
+        
+        for (serviceInfo in services) {
+            if (serviceClass.name == serviceInfo.service.className) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun startFloatingService() {
