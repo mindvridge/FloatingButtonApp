@@ -60,11 +60,13 @@
         <!-- OCR 결과 표시 및 편집 액티비티 (BottomSheet 스타일) -->
         <activity
             android:name=".OcrBottomSheetActivity"
-            android:launchMode="singleTop"
+            android:launchMode="singleInstance"
             android:exported="false"
             android:theme="@style/Theme.Transparent.BottomSheet"
             android:windowSoftInputMode="adjustResize|stateHidden"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.mv.floatingbuttonapp.ocr" />
 
         <!-- 플로팅 버튼 서비스 -->
         <service

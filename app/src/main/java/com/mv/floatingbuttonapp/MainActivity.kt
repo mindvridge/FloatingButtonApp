@@ -13,16 +13,32 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import com.mv.floatingbuttonapp.ui.theme.FloatingButtonAppTheme
+
+// 권한 정보를 담는 데이터 클래스
+data class PermissionInfo(
+    val name: String,
+    val description: String,
+    val isGranted: Boolean,
+    val onToggle: () -> Unit
+)
 
 class MainActivity : ComponentActivity() {
 
@@ -72,7 +88,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
+            FloatingButtonAppTheme {
                 MainScreen(
                     onStartServiceClick = {
                         checkAllPermissionsAndStart()
@@ -132,7 +148,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestMediaProjection() {
+    fun requestMediaProjection() {
         val intent = mediaProjectionManager.createScreenCaptureIntent()
         mediaProjectionLauncher.launch(intent)
     }
@@ -154,13 +170,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun hasOverlayPermission(): Boolean {
+    fun hasOverlayPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(this)
         } else true
     }
 
-    private fun requestOverlayPermission() {
+    fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -170,7 +186,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
+    fun isAccessibilityServiceEnabled(): Boolean {
         val expectedComponentName = "$packageName/${KeyboardDetectionAccessibilityService::class.java.name}"
 
         val enabledServices = Settings.Secure.getString(
@@ -183,12 +199,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun openAccessibilitySettings() {
+    fun openAccessibilitySettings() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         startActivity(intent)
     }
 
-    private fun hasNotificationPermission(): Boolean {
+    fun hasNotificationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this,
@@ -197,7 +213,7 @@ class MainActivity : ComponentActivity() {
         } else true
     }
 
-    private fun requestNotificationPermission() {
+    fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ActivityCompat.requestPermissions(
                 this,
@@ -205,6 +221,21 @@ class MainActivity : ComponentActivity() {
                 1001
             )
         }
+    }
+
+    fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    fun requestCameraPermission() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.CAMERA),
+            1002
+        )
     }
 
     private fun checkAndStartService() {
@@ -254,9 +285,16 @@ class MainActivity : ComponentActivity() {
         when (requestCode) {
             1001 -> { // 알림 권한
                 if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    checkAllPermissionsAndStart()
+                    Toast.makeText(this, "알림 권한이 허용되었습니다", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "알림 권한이 필요합니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "알림 권한이 거부되었습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+            1002 -> { // 카메라 권한
+                if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "카메라 권한이 허용되었습니다", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "카메라 권한이 거부되었습니다", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -268,6 +306,95 @@ fun MainScreen(
     onStartServiceClick: () -> Unit,
     onStopServiceClick: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as MainActivity
+    
+    // 각 권한의 상태를 실시간으로 확인하는 상태
+    var overlayPermission by remember { mutableStateOf(activity.hasOverlayPermission()) }
+    var accessibilityPermission by remember { mutableStateOf(activity.isAccessibilityServiceEnabled()) }
+    var notificationPermission by remember { mutableStateOf(activity.hasNotificationPermission()) }
+    var mediaProjectionPermission by remember { mutableStateOf(FloatingButtonService.mediaProjectionResultData != null) }
+    var cameraPermission by remember { mutableStateOf(activity.hasCameraPermission()) }
+    
+    // 권한 상태를 주기적으로 업데이트
+    LaunchedEffect(Unit) {
+        while (true) {
+            overlayPermission = activity.hasOverlayPermission()
+            accessibilityPermission = activity.isAccessibilityServiceEnabled()
+            notificationPermission = activity.hasNotificationPermission()
+            mediaProjectionPermission = FloatingButtonService.mediaProjectionResultData != null
+            cameraPermission = activity.hasCameraPermission()
+            kotlinx.coroutines.delay(1000) // 1초마다 업데이트
+        }
+    }
+    
+    // 권한 목록 생성
+    val permissions = listOf(
+        PermissionInfo(
+            name = "오버레이 권한",
+            description = "다른 앱 위에 플로팅 버튼을 표시하기 위한 권한",
+            isGranted = overlayPermission,
+            onToggle = {
+                if (!overlayPermission) {
+                    activity.requestOverlayPermission()
+                } else {
+                    Toast.makeText(context, "오버레이 권한은 설정에서만 해제할 수 있습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        ),
+        PermissionInfo(
+            name = "접근성 서비스",
+            description = "키보드 감지를 위한 접근성 서비스 권한",
+            isGranted = accessibilityPermission,
+            onToggle = {
+                if (!accessibilityPermission) {
+                    activity.openAccessibilitySettings()
+                } else {
+                    Toast.makeText(context, "접근성 서비스는 설정에서만 해제할 수 있습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        ),
+        PermissionInfo(
+            name = "알림 권한",
+            description = "Android 13+ 알림 표시를 위한 권한",
+            isGranted = notificationPermission,
+            onToggle = {
+                if (!notificationPermission) {
+                    activity.requestNotificationPermission()
+                } else {
+                    Toast.makeText(context, "알림 권한은 설정에서만 해제할 수 있습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        ),
+        PermissionInfo(
+            name = "화면 캡처 권한",
+            description = "화면을 캡처하여 OCR을 수행하기 위한 권한",
+            isGranted = mediaProjectionPermission,
+            onToggle = {
+                if (!mediaProjectionPermission) {
+                    activity.requestMediaProjection()
+                } else {
+                    // MediaProjection 권한은 재요청으로 해제
+                    FloatingButtonService.mediaProjectionResultData = null
+                    FloatingButtonService.mediaProjectionResultCode = 0
+                    Toast.makeText(context, "화면 캡처 권한이 해제되었습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        ),
+        PermissionInfo(
+            name = "카메라 권한",
+            description = "OCR 기능을 위한 카메라 권한",
+            isGranted = cameraPermission,
+            onToggle = {
+                if (!cameraPermission) {
+                    activity.requestCameraPermission()
+                } else {
+                    Toast.makeText(context, "카메라 권한은 설정에서만 해제할 수 있습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    )
+    
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -275,41 +402,111 @@ fun MainScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(16.dp)
         ) {
+            // 헤더
             Text(
-                text = "플로팅 버튼 컨트롤러",
+                text = "플로팅 버튼 권한 관리",
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
-
-            Text(
-                text = "이 앱은 다른 앱 위에 떠 있는 버튼을 만듭니다.\n" +
-                        "키보드가 나타나면 자동으로 키보드 위로 이동하며,\n" +
-                        "버튼을 클릭하면 화면을 캡처하여 OCR로 텍스트를 추출합니다.",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
-
-            Button(
-                onClick = onStartServiceClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
+            )
+            
+            Text(
+                text = "각 권한을 개별적으로 관리할 수 있습니다. 권한이 승인되면 토글이 체크됩니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp)
+            )
+            
+            // 권한 목록
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f)
             ) {
-                Text("플로팅 버튼 시작")
+                items(permissions) { permission ->
+                    PermissionToggleCard(
+                        permission = permission,
+                        onToggle = permission.onToggle
+                    )
+                }
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 서비스 제어 버튼들
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onStartServiceClick,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("서비스 시작")
+                }
+                
+                OutlinedButton(
+                    onClick = onStopServiceClick,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("서비스 중지")
+                }
+            }
+        }
+    }
+}
 
-            OutlinedButton(
-                onClick = onStopServiceClick,
-                modifier = Modifier.fillMaxWidth()
+@Composable
+fun PermissionToggleCard(
+    permission: PermissionInfo,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }, // 전체 카드를 클릭 가능하게 변경
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
-                Text("플로팅 버튼 중지")
+                Text(
+                    text = permission.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (permission.isGranted) 
+                        MaterialTheme.colorScheme.primary 
+                    else 
+                        MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = permission.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
+            
+            // 상태 표시 아이콘 (클릭 불가능)
+            Icon(
+                imageVector = if (permission.isGranted) Icons.Default.Check else Icons.Default.Close,
+                contentDescription = if (permission.isGranted) "권한 승인됨" else "권한 거부됨",
+                tint = if (permission.isGranted) 
+                    MaterialTheme.colorScheme.primary 
+                else 
+                    MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

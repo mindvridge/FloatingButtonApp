@@ -206,15 +206,12 @@ class FloatingButtonService :
     }
 
     private fun createNotification(): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        // 알림 클릭 시 앱을 열지 않도록 null로 설정
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("플로팅 버튼 대기 중")
             .setContentText("키보드 활성화를 감지합니다.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(null) // 앱을 열지 않도록 null로 설정
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -320,14 +317,10 @@ class FloatingButtonService :
 
         // MediaProjection이 준비되었는지 확인
         if (mediaProjection == null) {
-            // MainActivity로 MediaProjection 요청
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                action = "REQUEST_MEDIA_PROJECTION"
-            }
-            startActivity(intent)
-
-            // 잠시 후 다시 시도
+            // MediaProjection 권한이 없으면 토스트 메시지만 표시
+            Toast.makeText(this, "화면 캡처 권한이 필요합니다. 앱을 열어 권한을 설정해주세요.", Toast.LENGTH_LONG).show()
+            
+            // 플로팅 버튼 다시 표시
             handler.postDelayed({
                 floatingView?.visibility = View.VISIBLE
             }, 1000)
@@ -416,9 +409,12 @@ class FloatingButtonService :
         // 추천 텍스트 생성 (예시)
         val suggestions = generateSuggestions(recognizedText)
 
-        // OcrBottomSheetActivity 실행
+        // OcrBottomSheetActivity 실행 (기존 앱을 완전히 분리하여 실행)
         val intent = Intent(this, OcrBottomSheetActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                    Intent.FLAG_ACTIVITY_NO_HISTORY or 
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK
             putExtra(OcrBottomSheetActivity.EXTRA_OCR_TEXT, recognizedText)
             putStringArrayListExtra(
                 OcrBottomSheetActivity.EXTRA_SUGGESTIONS,

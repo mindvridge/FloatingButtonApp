@@ -461,26 +461,6 @@ fun OcrBottomSheetContent(
                             )
                         }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Button(
-                                onClick = onRetry,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) { Text("다시 인식하기", color = Color(0xFF666666)) }
-
-                            Button(
-                                onClick = { isEditMode = true },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) { Text("직접 수정하기", color = Color(0xFF666666)) }
-                        }
 
                        /* TextButton(
                             onClick = {  옵션 선택  },
@@ -519,6 +499,7 @@ fun OcrBottomSheetContent(
                                 Text("답변 추천")
                             }
                         }
+
                     }
                 }
 

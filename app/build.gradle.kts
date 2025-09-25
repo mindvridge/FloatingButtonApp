@@ -66,20 +66,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation("androidx.savedstate:savedstate")
-
-    // ML Kit Text Recognition (OCR) - 한국어 지원
+    
+    // ML Kit OCR 의존성
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation("com.google.mlkit:text-recognition-korean:16.0.0")
-
-    // Camera 관련 (이미지 처리용)
-    implementation("androidx.camera:camera-core:1.3.1")
-
-    // Coroutines (비동기 처리)
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-
-    // Material Components (BottomSheet 등)
-    implementation("com.google.android.material:material:1.11.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
