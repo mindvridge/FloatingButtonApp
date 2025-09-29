@@ -116,6 +116,29 @@ class FloatingButtonService :
             }
         }
     }
+    
+    // 화면 캡처 결과 리시버
+    private val screenshotReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.d(TAG, "screenshotReceiver onReceive 호출됨")
+            Log.d(TAG, "intent: $intent")
+            Log.d(TAG, "intent action: ${intent?.action}")
+            Log.d(TAG, "예상 action: ${KeyboardDetectionAccessibilityService.ACTION_TAKE_SCREENSHOT}")
+            
+            if (intent?.action == KeyboardDetectionAccessibilityService.ACTION_TAKE_SCREENSHOT) {
+                Log.d(TAG, "화면 캡처 브로드캐스트 수신됨")
+                val bitmap = intent.getParcelableExtra<Bitmap>(KeyboardDetectionAccessibilityService.EXTRA_SCREENSHOT_BITMAP)
+                if (bitmap != null) {
+                    Log.d(TAG, "화면 캡처 결과 수신됨: ${bitmap.width}x${bitmap.height}")
+                    processScreenshot(bitmap)
+                } else {
+                    Log.e(TAG, "화면 캡처 결과가 null입니다")
+                }
+            } else {
+                Log.d(TAG, "다른 브로드캐스트 수신됨: ${intent?.action}")
+            }
+        }
+    }
 
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -182,6 +205,9 @@ class FloatingButtonService :
             
             if (resultCode == Activity.RESULT_OK && data != null) {
                 try {
+                    // 토큰 캐싱
+                    cacheMediaProjectionToken(data)
+                    
                     mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
                     Log.d(TAG, "MediaProjection created and stored in service.")
 
@@ -306,18 +332,34 @@ class FloatingButtonService :
     }
 
     private fun registerKeyboardReceiver() {
-        val filter = IntentFilter().apply {
+        val keyboardFilter = IntentFilter().apply {
             addAction(KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_SHOWN)
             addAction(KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_HIDDEN)
+        }
+        
+        val ocrFilter = IntentFilter().apply {
             addAction("com.mv.floatingbuttonapp.RETRY_OCR")
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(keyboardStateReceiver, filter, RECEIVER_NOT_EXPORTED)
-            registerReceiver(ocrRetryReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            //registerReceiver(keyboardStateReceiver, filter)
-            //registerReceiver(ocrRetryReceiver, filter)
+        
+        val screenshotFilter = IntentFilter().apply {
+            addAction(KeyboardDetectionAccessibilityService.ACTION_TAKE_SCREENSHOT)
         }
+        
+        Log.d(TAG, "브로드캐스트 리시버 등록 중...")
+        Log.d(TAG, "키보드 필터: ${keyboardFilter.actionsIterator().asSequence().toList()}")
+        Log.d(TAG, "OCR 필터: ${ocrFilter.actionsIterator().asSequence().toList()}")
+        Log.d(TAG, "스크린샷 필터: ${screenshotFilter.actionsIterator().asSequence().toList()}")
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(keyboardStateReceiver, keyboardFilter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(ocrRetryReceiver, ocrFilter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(screenshotReceiver, screenshotFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(keyboardStateReceiver, keyboardFilter)
+            registerReceiver(ocrRetryReceiver, ocrFilter)
+            registerReceiver(screenshotReceiver, screenshotFilter)
+        }
+        Log.d(TAG, "브로드캐스트 리시버 등록 완료")
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
@@ -498,25 +540,77 @@ class FloatingButtonService :
     private fun handleButtonClick() {
         Log.d(TAG, "handleButtonClick() started")
 
-        // 1. 서비스가 유효한 MediaProjection 객체를 가지고 있는지 확인합니다.
-        val currentProjection = mediaProjection
-        if (currentProjection == null) {
-            Log.e(TAG, "MediaProjection is not available. Requesting permission again.")
-            showPermissionRequestToast("화면 캡처 권한이 만료되었습니다. 앱을 열어 권한을 다시 허용해주세요.")
-
-            // MainActivity에 권한 재요청을 알립니다.
-            val intent = Intent(this, MainActivity::class.java).apply {
-                action = "REQUEST_MEDIA_PROJECTION"
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-            return
+        // MediaProjection을 통한 화면 캡처 사용
+        if (mediaProjection != null) {
+            Log.d(TAG, "MediaProjection을 통한 화면 캡처 시작")
+            // 버튼을 숨기고 캡처를 진행합니다.
+            floatingView?.visibility = View.GONE
+            Log.d(TAG, "플로팅 버튼 숨김 완료")
+            
+            captureScreen(mediaProjection!!)
+        } else {
+            Log.d(TAG, "MediaProjection이 없어서 권한 요청")
+            requestMediaProjectionPermission()
         }
-
-        // 2. 버튼을 숨기고 캡처를 진행합니다.
-        floatingView?.visibility = View.GONE
-        captureScreen(currentProjection) // 유효한 객체를 전달합니다.
     }
+    private fun requestMediaProjectionPermission() {
+        Log.d(TAG, "MediaProjection 권한 요청")
+        
+        // 캐시된 토큰이 있는지 확인
+        val cachedToken = getCachedMediaProjectionToken()
+        if (cachedToken != null) {
+            Log.d(TAG, "캐시된 MediaProjection 토큰 사용")
+            try {
+                val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                mediaProjection = mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, cachedToken)
+                Log.d(TAG, "캐시된 토큰으로 MediaProjection 생성 성공")
+                
+                // 화면 캡처 실행
+                captureScreen(mediaProjection!!)
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "캐시된 토큰 사용 실패", e)
+                // 캐시된 토큰이 유효하지 않으면 삭제
+                clearCachedMediaProjectionToken()
+            }
+        }
+        
+        // 캐시된 토큰이 없거나 유효하지 않으면 MainActivity로 브로드캐스트 전송
+        Log.d(TAG, "MainActivity로 MediaProjection 권한 요청 브로드캐스트 전송")
+        val intent = Intent("com.mv.floatingbuttonapp.REQUEST_MEDIA_PROJECTION").apply {
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+    
+    private fun getCachedMediaProjectionToken(): Intent? {
+        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
+        val tokenData = prefs.getString("cached_token", null)
+        return if (tokenData != null) {
+            try {
+                Intent.parseUri(tokenData, 0)
+            } catch (e: Exception) {
+                Log.e(TAG, "캐시된 토큰 파싱 실패", e)
+                null
+            }
+        } else {
+            null
+        }
+    }
+    
+    private fun cacheMediaProjectionToken(intent: Intent) {
+        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
+        val tokenData = intent.toUri(0)
+        prefs.edit().putString("cached_token", tokenData).apply()
+        Log.d(TAG, "MediaProjection 토큰 캐시됨")
+    }
+    
+    private fun clearCachedMediaProjectionToken() {
+        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
+        prefs.edit().remove("cached_token").apply()
+        Log.d(TAG, "캐시된 MediaProjection 토큰 삭제됨")
+    }
+
     private fun showPermissionRequestToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
@@ -524,6 +618,94 @@ class FloatingButtonService :
         handler.postDelayed({
             floatingView?.visibility = View.VISIBLE
         }, 500)
+    }
+    
+    // MediaProjection 권한 결과 처리
+    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == REQUEST_MEDIA_PROJECTION) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                Log.d(TAG, "MediaProjection 권한 승인됨")
+                
+                // 토큰 캐싱
+                cacheMediaProjectionToken(data)
+                
+                // MediaProjection 생성
+                val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
+                
+                Log.d(TAG, "MediaProjection 생성 완료")
+                
+                // 화면 캡처 실행
+                captureScreen(mediaProjection!!)
+            } else {
+                Log.d(TAG, "MediaProjection 권한 거부됨")
+                showPermissionRequestToast("화면 캡처 권한이 거부되었습니다.")
+            }
+        }
+    }
+    
+    /**
+     * 화면 캡처 결과 처리
+     */
+    private fun processScreenshot(bitmap: Bitmap) {
+        Log.d(TAG, "processScreenshot 호출됨: ${bitmap.width}x${bitmap.height}")
+        
+        try {
+            // InputImage 생성
+            Log.d(TAG, "InputImage 생성 중...")
+            val inputImage = InputImage.fromBitmap(bitmap, 0)
+            Log.d(TAG, "InputImage 생성 완료")
+            
+            // OCR 수행
+            Log.d(TAG, "OCR 처리 시작...")
+            textRecognizer.process(inputImage)
+                .addOnSuccessListener { visionText ->
+                    Log.d(TAG, "OCR 처리 성공")
+                    val extractedText = visionText.text
+                    Log.d(TAG, "추출된 텍스트 길이: ${extractedText.length}")
+                    Log.d(TAG, "추출된 텍스트: $extractedText")
+                    
+                    if (extractedText.isNotEmpty()) {
+                        Log.d(TAG, "OCR 결과를 BottomSheet로 표시")
+                        // OCR 결과를 BottomSheet로 표시
+                        showOcrBottomSheet(extractedText)
+                    } else {
+                        Log.d(TAG, "추출된 텍스트가 없습니다")
+                        showPermissionRequestToast("텍스트를 찾을 수 없습니다.")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "OCR 처리 실패", e)
+                    showPermissionRequestToast("텍스트 인식에 실패했습니다.")
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "화면 캡처 결과 처리 중 오류", e)
+            showPermissionRequestToast("화면 캡처 처리 중 오류가 발생했습니다.")
+        } finally {
+            // 플로팅 버튼 다시 표시
+            Log.d(TAG, "플로팅 버튼 다시 표시 예약")
+            handler.postDelayed({
+                floatingView?.visibility = View.VISIBLE
+                Log.d(TAG, "플로팅 버튼 다시 표시됨")
+            }, 500)
+        }
+    }
+    
+    /**
+     * OCR 결과를 BottomSheet로 표시
+     */
+    private fun showOcrBottomSheet(extractedText: String) {
+        try {
+            val intent = Intent(this, OcrBottomSheetActivity::class.java).apply {
+                putExtra("extracted_text", extractedText)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            Log.d(TAG, "OCR BottomSheet 표시됨")
+        } catch (e: Exception) {
+            Log.e(TAG, "OCR BottomSheet 표시 중 오류", e)
+            showPermissionRequestToast("OCR 결과 표시에 실패했습니다.")
+        }
     }
 
 

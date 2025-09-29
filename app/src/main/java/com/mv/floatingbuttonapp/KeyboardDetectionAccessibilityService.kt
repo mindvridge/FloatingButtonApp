@@ -3,7 +3,9 @@ package com.mv.floatingbuttonapp
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -15,7 +17,9 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         private const val TAG = "KeyboardAccessibility"
         const val ACTION_KEYBOARD_SHOWN = "com.mv.floatingbuttonapp.KEYBOARD_SHOWN"
         const val ACTION_KEYBOARD_HIDDEN = "com.mv.floatingbuttonapp.KEYBOARD_HIDDEN"
+        const val ACTION_TAKE_SCREENSHOT = "com.mv.floatingbuttonapp.TAKE_SCREENSHOT"
         const val EXTRA_KEYBOARD_HEIGHT = "keyboard_height"
+        const val EXTRA_SCREENSHOT_BITMAP = "screenshot_bitmap"
 
         @Volatile
         var instance: KeyboardDetectionAccessibilityService? = null
@@ -174,6 +178,68 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.d(TAG, "AccessibilityService interrupted")
+    }
+
+    /**
+     * 화면 캡처 메서드 (Android 11+)
+     */
+    fun takeScreenshot(): Bitmap? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                Log.d(TAG, "takeScreenshot() 호출됨")
+                takeScreenshot(
+                    android.view.Display.DEFAULT_DISPLAY,
+                    java.util.concurrent.Executors.newSingleThreadExecutor(),
+                    object : AccessibilityService.TakeScreenshotCallback {
+                        override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
+                            Log.d(TAG, "화면 캡처 성공")
+                            // ScreenshotResult를 Bitmap으로 변환 (Android API에 따라 다를 수 있음)
+                            try {
+                                // reflection을 사용하여 bitmap 속성에 접근
+                                val bitmapField = screenshot.javaClass.getDeclaredField("bitmap")
+                                bitmapField.isAccessible = true
+                                val bitmap = bitmapField.get(screenshot) as? Bitmap
+                                
+                                bitmap?.let {
+                                    Log.d(TAG, "화면 캡처 결과: ${it.width}x${it.height}")
+                                    // 화면 캡처 결과를 브로드캐스트로 전송
+                                    broadcastScreenshot(it)
+                                } ?: run {
+                                    Log.e(TAG, "화면 캡처 결과 bitmap이 null")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "화면 캡처 결과 처리 중 오류", e)
+                            }
+                        }
+                        
+                        override fun onFailure(errorCode: Int) {
+                            Log.e(TAG, "화면 캡처 실패: errorCode = $errorCode")
+                        }
+                    }
+                )
+                null // 비동기이므로 즉시 null 반환
+            } catch (e: Exception) {
+                Log.e(TAG, "화면 캡처 중 오류", e)
+                null
+            }
+        } else {
+            Log.w(TAG, "Android 11 미만에서는 takeScreenshot()을 사용할 수 없습니다")
+            null
+        }
+    }
+    
+    /**
+     * 화면 캡처 결과를 브로드캐스트로 전송
+     */
+    private fun broadcastScreenshot(bitmap: Bitmap) {
+        Log.d(TAG, "broadcastScreenshot 호출됨: ${bitmap.width}x${bitmap.height}")
+        val intent = Intent(ACTION_TAKE_SCREENSHOT).apply {
+            putExtra(EXTRA_SCREENSHOT_BITMAP, bitmap)
+            setPackage(packageName)
+        }
+        Log.d(TAG, "브로드캐스트 전송: action=${intent.action}, package=${intent.`package`}")
+        sendBroadcast(intent)
+        Log.d(TAG, "화면 캡처 결과 브로드캐스트 전송 완료")
     }
 
     override fun onDestroy() {

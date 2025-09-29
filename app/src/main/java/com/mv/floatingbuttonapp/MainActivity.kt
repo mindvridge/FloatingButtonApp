@@ -4,8 +4,11 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.Context.RECEIVER_NOT_EXPORTED
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -107,6 +110,14 @@ class MainActivity : ComponentActivity() {
         
         // 자동 로그인 확인
         checkAutoLogin()
+        
+        // MediaProjection 권한 요청 리시버 등록
+        val filter = IntentFilter("com.mv.floatingbuttonapp.REQUEST_MEDIA_PROJECTION")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaProjectionRequestReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(mediaProjectionRequestReceiver, filter)
+        }
 
         setContent {
             FloatingButtonAppTheme {
@@ -126,11 +137,9 @@ class MainActivity : ComponentActivity() {
                         onLogoutClick = { logoutFromKakao() },
                         onOverlayPermissionClick = { requestOverlayPermission() },
                         onAccessibilityPermissionClick = { requestAccessibilityPermission() },
-                        onMediaProjectionPermissionClick = { requestMediaProjectionPermission() },
                         currentUser = currentUser,
                         hasOverlayPermission = hasOverlayPermission,
-                        hasAccessibilityPermission = hasAccessibilityPermission,
-                        hasMediaProjectionPermission = hasMediaProjectionPermission
+                        hasAccessibilityPermission = hasAccessibilityPermission
                     )
                 } else {
                     // 로그인되지 않은 경우: 로그인 화면
@@ -164,6 +173,15 @@ class MainActivity : ComponentActivity() {
         hasAccessibilityPermission = checkAccessibilityPermission()
         hasMediaProjectionPermission = checkMediaProjectionPermission()
         Log.d("MainActivity", "권한 상태 확인 - 오버레이: $hasOverlayPermission, 접근성: $hasAccessibilityPermission, 화면캡처: $hasMediaProjectionPermission")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(mediaProjectionRequestReceiver)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "브로드캐스트 리시버 해제 중 오류", e)
+        }
     }
     
     /**
@@ -276,15 +294,8 @@ class MainActivity : ComponentActivity() {
     // ... (나머지 코드는 동일하게 유지)
     private fun startFloatingService() {
         try {
-            // MediaProjection 권한이 없으면 먼저 요청
-            if (!hasMediaProjectionPermission) {
-                Log.d("MainActivity", "화면 캡처 권한이 없어서 먼저 요청")
-                requestMediaProjection()
-                return // 권한 요청 후 서비스는 onActivityResult에서 시작
-            }
-            
-            // 권한이 있으면 서비스 시작
-            Log.d("MainActivity", "화면 캡처 권한이 있어서 서비스 시작")
+            // AccessibilityService를 통한 화면 캡처 사용으로 MediaProjection 권한 불필요
+            Log.d("MainActivity", "서비스 시작 (AccessibilityService 화면 캡처 사용)")
             val intent = Intent(this, FloatingButtonService::class.java)
             startService(intent)
         } catch (e: Exception) {
@@ -297,6 +308,16 @@ class MainActivity : ComponentActivity() {
         val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
         startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
+    }
+    
+    // FloatingButtonService로부터 MediaProjection 권한 요청을 받는 리시버
+    private val mediaProjectionRequestReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.mv.floatingbuttonapp.REQUEST_MEDIA_PROJECTION") {
+                Log.d("MainActivity", "MediaProjection 권한 요청 브로드캐스트 수신됨")
+                requestMediaProjection()
+            }
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -312,13 +333,14 @@ class MainActivity : ComponentActivity() {
                 Log.d("MainActivity", "MediaProjection 권한 승인됨")
                 Toast.makeText(this, "화면 캡처 권한이 승인되었습니다.", Toast.LENGTH_SHORT).show()
                 
-                // 서비스 시작
-                val intent = Intent(this, FloatingButtonService::class.java)
-                intent.putExtra("resultCode", resultCode)
-                intent.putExtra("data", data)
-                startService(intent)
+                // FloatingButtonService에 결과 전달
+                val serviceIntent = Intent(this, FloatingButtonService::class.java)
+                serviceIntent.putExtra("resultCode", resultCode)
+                serviceIntent.putExtra("data", data)
+                startService(serviceIntent)
+                
                 Log.d("MainActivity", "서비스 시작됨")
-                } else {
+            } else {
                 Log.d("MainActivity", "MediaProjection 권한 거부됨")
                 Toast.makeText(this, "화면 캡처 권한이 거부되었습니다.", Toast.LENGTH_SHORT).show()
             }
@@ -326,13 +348,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAllPermissionsAndStart(): Boolean {
-        return checkOverlayPermission() && checkAccessibilityPermission() && checkMediaProjectionPermission()
+        return checkOverlayPermission() && checkAccessibilityPermission()
     }
 
     private fun checkOverlayPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(this)
-        } else {
+                } else {
             true
         }
     }
@@ -405,11 +427,9 @@ fun MainScreen(
     onLogoutClick: () -> Unit,
     onOverlayPermissionClick: () -> Unit,
     onAccessibilityPermissionClick: () -> Unit,
-    onMediaProjectionPermissionClick: () -> Unit,
     currentUser: UserInfo?,
     hasOverlayPermission: Boolean,
-    hasAccessibilityPermission: Boolean,
-    hasMediaProjectionPermission: Boolean
+    hasAccessibilityPermission: Boolean
 ) {
     var isServiceRunning by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -586,41 +606,6 @@ fun MainScreen(
                         }
                     }
                     
-                    // 화면 캡처 권한
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (hasMediaProjectionPermission) Icons.Default.Check else Icons.Default.Close,
-                            contentDescription = "화면 캡처 권한",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (hasMediaProjectionPermission) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "화면 캡처",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                        )
-                        if (!hasMediaProjectionPermission) {
-                            Button(
-                                onClick = onMediaProjectionPermissionClick,
-                                modifier = Modifier.height(32.dp)
-                            ) {
-                                Text(
-                                    text = "설정",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
@@ -677,7 +662,7 @@ fun MainScreen(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text(
+                Text(
                         text = "서비스 중지",
                         style = MaterialTheme.typography.titleMedium
                     )
