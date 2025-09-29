@@ -69,11 +69,7 @@ class FloatingButtonService :
     private var screenHeight = 0
     private var screenWidth = 0
 
-    // 화면 캡처 관련
-    private var mediaProjection: MediaProjection? = null
-    private var virtualDisplay: VirtualDisplay? = null
-    private var imageReader: ImageReader? = null
-    private lateinit var mediaProjectionManager: MediaProjectionManager
+    // 화면 캡처는 AccessibilityService를 통해 수행
 
     // OCR 관련
     private lateinit var textRecognizer: TextRecognizer
@@ -144,11 +140,6 @@ class FloatingButtonService :
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "floating_button_channel"
         private const val TAG = "FloatingButtonService"
-        const val REQUEST_MEDIA_PROJECTION = 1002
-
-        // MediaProjection 결과를 저장할 정적 변수
-        var mediaProjectionResultData: Intent? = null
-        var mediaProjectionResultCode: Int = 0
     }
 
     override fun onCreate() {
@@ -157,7 +148,6 @@ class FloatingButtonService :
         Log.d(TAG, "Service onCreate")
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         // OCR 초기화 (한국어 지원)
         val koreanOptions = KoreanTextRecognizerOptions.Builder().build()
@@ -198,34 +188,6 @@ class FloatingButtonService :
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand called")
         
-        // MainActivity로부터 MediaProjection 데이터를 받았을 때 객체를 생성하고 저장합니다.
-        if (intent?.hasExtra("resultCode") == true && intent.hasExtra("data")) {
-            val resultCode = intent.getIntExtra("resultCode", 0)
-            val data = intent.getParcelableExtra<Intent>("data")
-            
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                try {
-                    // 토큰 캐싱
-                    cacheMediaProjectionToken(data)
-                    
-                    mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
-                    Log.d(TAG, "MediaProjection created and stored in service.")
-
-                    // 프로젝션이 예기치 않게 중지될 때를 대비해 콜백을 등록합니다.
-                    mediaProjection?.registerCallback(object : Callback() {
-                        override fun onStop() {
-                            Log.w(TAG, "MediaProjection was stopped unexpectedly. Cleaning up.")
-                            mediaProjection = null
-                        }
-                    }, handler)
-
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to create MediaProjection onStartCommand: ${e.message}", e)
-                    mediaProjection = null
-                }
-            }
-        }
-        
         // 플로팅 버튼은 키보드 상태에 따라 동적으로 생성/제거
         // 초기에는 키보드가 비활성화 상태이므로 플로팅 버튼을 생성하지 않음
         // 키보드 상태 확인 후 필요시 플로팅 버튼 생성
@@ -234,102 +196,7 @@ class FloatingButtonService :
         return START_STICKY
     }
 
-    // MediaProjection 업데이트 메서드
-    fun updateMediaProjection() {
-        Log.d(TAG, "updateMediaProjection() called")
-        
-        // 기존 MediaProjection 정리
-        if (mediaProjection != null) {
-            Log.d(TAG, "Stopping existing MediaProjection")
-            mediaProjection?.stop()
-            mediaProjection = null
-        }
-        
-        // 새로운 MediaProjection 생성
-        if (mediaProjectionResultData != null && mediaProjectionResultCode != 0) {
-            try {
-                mediaProjection = mediaProjectionManager.getMediaProjection(
-                    mediaProjectionResultCode,
-                    mediaProjectionResultData!!
-                )
-                Log.d(TAG, "MediaProjection created successfully")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to create MediaProjection: ${e.message}", e)
-            }
-        } else {
-            Log.w(TAG, "Cannot create MediaProjection: missing result data")
-        }
-    }
-
-    // 리소스 정리 메서드
-    private fun cleanupResources() {
-        virtualDisplay?.release()
-        virtualDisplay = null
-        imageReader?.close()
-        imageReader = null
-        // MediaProjection은 매번 새로 생성하므로 여기서는 정리하지 않음
-    }
-
-    // VirtualDisplay만 정리하는 메서드 (MediaProjection은 유지)
-    private fun cleanupVirtualDisplay() {
-        virtualDisplay?.release()
-        virtualDisplay = null
-        imageReader?.close()
-        imageReader = null
-    }
-
-    // MediaProjection 유효성 확인 메서드 (간단한 버전)
-    private fun isMediaProjectionValid(): Boolean {
-        return try {
-            val isValid = mediaProjection != null && mediaProjectionResultData != null && mediaProjectionResultCode != 0
-            Log.d(TAG, "MediaProjection validation: $isValid (mediaProjection: ${mediaProjection != null}, resultData: ${mediaProjectionResultData != null}, resultCode: $mediaProjectionResultCode)")
-            isValid
-        } catch (e: Exception) {
-            Log.e(TAG, "MediaProjection validation error: ${e.message}")
-            false
-        }
-    }
-
-    // MediaProjection 재생성 메서드
-    private fun recreateMediaProjection(): Boolean {
-        return try {
-            Log.d(TAG, "Attempting to recreate MediaProjection...")
-            
-            if (mediaProjectionResultData != null && mediaProjectionResultCode != 0) {
-                // 기존 MediaProjection 정리
-                if (mediaProjection != null) {
-                    Log.d(TAG, "Stopping existing MediaProjection...")
-                    try {
-                        mediaProjection?.stop()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error stopping MediaProjection: ${e.message}")
-                    }
-                    mediaProjection = null
-                }
-                
-                // 잠시 대기 후 새로운 MediaProjection 생성
-                Thread.sleep(100)
-                
-                // 새로운 MediaProjection 생성
-                Log.d(TAG, "Creating new MediaProjection...")
-                mediaProjection = mediaProjectionManager.getMediaProjection(
-                    mediaProjectionResultCode,
-                    mediaProjectionResultData!!
-                )
-                
-                Log.d(TAG, "MediaProjection recreated successfully")
-                true
-            } else {
-                Log.w(TAG, "Cannot recreate MediaProjection: missing result data")
-                false
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to recreate MediaProjection: ${e.message}", e)
-            mediaProjection?.stop()
-            mediaProjection = null
-            false
-        }
-    }
+    // MediaProjection 관련 메서드들은 더 이상 사용하지 않음 (AccessibilityService 사용)
 
     private fun registerKeyboardReceiver() {
         val keyboardFilter = IntentFilter().apply {
@@ -540,76 +407,41 @@ class FloatingButtonService :
     private fun handleButtonClick() {
         Log.d(TAG, "handleButtonClick() started")
 
-        // MediaProjection을 통한 화면 캡처 사용
-        if (mediaProjection != null) {
-            Log.d(TAG, "MediaProjection을 통한 화면 캡처 시작")
+        // AccessibilityService를 통한 화면 캡처 사용
+        val accessibilityService = KeyboardDetectionAccessibilityService.instance
+        if (accessibilityService != null) {
+            Log.d(TAG, "AccessibilityService를 통한 화면 캡처 시작")
             // 버튼을 숨기고 캡처를 진행합니다.
             floatingView?.visibility = View.GONE
             Log.d(TAG, "플로팅 버튼 숨김 완료")
             
-            captureScreen(mediaProjection!!)
-        } else {
-            Log.d(TAG, "MediaProjection이 없어서 권한 요청")
-            requestMediaProjectionPermission()
-        }
-    }
-    private fun requestMediaProjectionPermission() {
-        Log.d(TAG, "MediaProjection 권한 요청")
-        
-        // 캐시된 토큰이 있는지 확인
-        val cachedToken = getCachedMediaProjectionToken()
-        if (cachedToken != null) {
-            Log.d(TAG, "캐시된 MediaProjection 토큰 사용")
             try {
-                val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                mediaProjection = mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, cachedToken)
-                Log.d(TAG, "캐시된 토큰으로 MediaProjection 생성 성공")
-                
-                // 화면 캡처 실행
-                captureScreen(mediaProjection!!)
-                return
+                // AccessibilityService에 화면 캡처 요청
+                val screenshot = accessibilityService.takeScreenshot()
+                if (screenshot != null) {
+                    Log.d(TAG, "화면 캡처 성공: ${screenshot.width}x${screenshot.height}")
+                    processScreenshot(screenshot)
+                } else {
+                    Log.e(TAG, "화면 캡처 실패: null 반환")
+                    showPermissionRequestToast("화면 캡처에 실패했습니다. 접근성 서비스 설정을 확인해주세요.")
+                }
+            } catch (e: SecurityException) {
+                Log.e(TAG, "화면 캡처 권한 없음", e)
+                showPermissionRequestToast("화면 캡처 권한이 없습니다. 접근성 서비스 설정을 확인해주세요.")
             } catch (e: Exception) {
-                Log.e(TAG, "캐시된 토큰 사용 실패", e)
-                // 캐시된 토큰이 유효하지 않으면 삭제
-                clearCachedMediaProjectionToken()
-            }
-        }
-        
-        // 캐시된 토큰이 없거나 유효하지 않으면 MainActivity로 브로드캐스트 전송
-        Log.d(TAG, "MainActivity로 MediaProjection 권한 요청 브로드캐스트 전송")
-        val intent = Intent("com.mv.floatingbuttonapp.REQUEST_MEDIA_PROJECTION").apply {
-            setPackage(packageName)
-        }
-        sendBroadcast(intent)
-    }
-    
-    private fun getCachedMediaProjectionToken(): Intent? {
-        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
-        val tokenData = prefs.getString("cached_token", null)
-        return if (tokenData != null) {
-            try {
-                Intent.parseUri(tokenData, 0)
-            } catch (e: Exception) {
-                Log.e(TAG, "캐시된 토큰 파싱 실패", e)
-                null
+                Log.e(TAG, "화면 캡처 중 오류", e)
+                showPermissionRequestToast("화면 캡처 중 오류가 발생했습니다: ${e.message}")
             }
         } else {
-            null
+            Log.e(TAG, "AccessibilityService가 활성화되지 않음")
+            Toast.makeText(this, "접근성 서비스를 활성화해주세요", Toast.LENGTH_LONG).show()
+            // 플로팅 버튼 다시 표시
+            handler.postDelayed({
+                floatingView?.visibility = View.VISIBLE
+            }, 500)
         }
     }
-    
-    private fun cacheMediaProjectionToken(intent: Intent) {
-        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
-        val tokenData = intent.toUri(0)
-        prefs.edit().putString("cached_token", tokenData).apply()
-        Log.d(TAG, "MediaProjection 토큰 캐시됨")
-    }
-    
-    private fun clearCachedMediaProjectionToken() {
-        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
-        prefs.edit().remove("cached_token").apply()
-        Log.d(TAG, "캐시된 MediaProjection 토큰 삭제됨")
-    }
+    // MediaProjection 관련 메서드들은 더 이상 사용하지 않음 (AccessibilityService 사용)
 
     private fun showPermissionRequestToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
@@ -620,29 +452,7 @@ class FloatingButtonService :
         }, 500)
     }
     
-    // MediaProjection 권한 결과 처리
-    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == REQUEST_MEDIA_PROJECTION) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                Log.d(TAG, "MediaProjection 권한 승인됨")
-                
-                // 토큰 캐싱
-                cacheMediaProjectionToken(data)
-                
-                // MediaProjection 생성
-                val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
-                
-                Log.d(TAG, "MediaProjection 생성 완료")
-                
-                // 화면 캡처 실행
-                captureScreen(mediaProjection!!)
-            } else {
-                Log.d(TAG, "MediaProjection 권한 거부됨")
-                showPermissionRequestToast("화면 캡처 권한이 거부되었습니다.")
-            }
-        }
-    }
+    // MediaProjection 관련 메서드들은 더 이상 사용하지 않음 (AccessibilityService 사용)
     
     /**
      * 화면 캡처 결과 처리
@@ -709,134 +519,7 @@ class FloatingButtonService :
     }
 
 
-    private fun captureScreen(projection: MediaProjection) {
-        Log.d(TAG, "captureScreen() started")
-
-        // VirtualDisplay와 ImageReader만 매번 새로 생성하고 정리합니다.
-        cleanupVirtualDisplay()
-
-        val metrics = resources.displayMetrics
-
-        try {
-            imageReader = ImageReader.newInstance(
-                metrics.widthPixels, metrics.heightPixels, PixelFormat.RGBA_8888, 2
-            )
-
-            virtualDisplay = projection.createVirtualDisplay(
-                "ScreenCapture",
-                metrics.widthPixels, metrics.heightPixels, metrics.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface, null, null
-            )
-            Log.d(TAG, "VirtualDisplay created successfully")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create VirtualDisplay: ${e.message}", e)
-            showPermissionRequestToast("화면 캡처에 실패했습니다. 다시 시도해주세요.")
-            cleanupVirtualDisplay()
-            // 여기서 projection.stop()을 호출하지 않습니다. 서비스가 살아있는 동안 유지해야 합니다.
-            return
-        }
-
-        imageReader?.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage()
-            if (image != null) {
-                val bitmap = convertImageToBitmap(image)
-                image.close()
-
-                // 중요: VirtualDisplay만 정리하고 MediaProjection 객체는 그대로 둡니다.
-                virtualDisplay?.release()
-                virtualDisplay = null
-
-                // projection.stop()을 호출하지 않습니다.
-
-                processOCR(bitmap)
-            }
-        }, handler)
-    }
-
-    private fun convertImageToBitmap(image: android.media.Image): Bitmap {
-        val planes = image.planes
-        val buffer = planes[0].buffer
-        val pixelStride = planes[0].pixelStride
-        val rowStride = planes[0].rowStride
-        val rowPadding = rowStride - pixelStride * image.width
-
-        val bitmap = Bitmap.createBitmap(
-            image.width + rowPadding / pixelStride,
-            image.height,
-            Bitmap.Config.ARGB_8888
-        )
-        bitmap.copyPixelsFromBuffer(buffer)
-
-        return bitmap
-    }
-
-    private fun processOCR(bitmap: Bitmap) {
-        val inputImage = InputImage.fromBitmap(bitmap, 0)
-
-        textRecognizer.process(inputImage)
-            .addOnSuccessListener { visionText ->
-                handleOCRResult(visionText)
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "OCR failed", e)
-                Toast.makeText(this, "텍스트 인식에 실패했습니다", Toast.LENGTH_SHORT).show()
-                floatingView?.visibility = View.VISIBLE
-            }
-    }
-
-    private fun handleOCRResult(visionText: Text) {
-        val recognizedText = visionText.text
-
-        // 추천 텍스트 생성 (예시)
-        val suggestions = generateSuggestions(recognizedText)
-
-        // OcrBottomSheetActivity 실행 (기존 앱을 완전히 분리하여 실행)
-        val intent = Intent(this, OcrBottomSheetActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                    Intent.FLAG_ACTIVITY_NO_HISTORY or 
-                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK
-            putExtra(OcrBottomSheetActivity.EXTRA_OCR_TEXT, recognizedText)
-            putStringArrayListExtra(
-                OcrBottomSheetActivity.EXTRA_SUGGESTIONS,
-                ArrayList(suggestions)
-            )
-        }
-        startActivity(intent)
-
-        // 플로팅 버튼 다시 표시
-        handler.postDelayed({
-            floatingView?.visibility = View.VISIBLE
-        }, 500)
-    }
-
-    private fun generateSuggestions(text: String): List<String> {
-        val suggestions = mutableListOf<String>()
-
-        // 텍스트 분석하여 자동 추천 생성
-        when {
-            text.contains("내일 약속 있어?") -> {
-                suggestions.add("내일 약속 있어?")
-            }
-            text.contains("아냐 내일은 없던") -> {
-                suggestions.add("아냐 내일은 없던 ~ 왜?")
-            }
-            text.contains("저녁에 영화") -> {
-                suggestions.add("내일 저녁에 영화 보러갈래?")
-            }
-            text.contains("무슨 영화") -> {
-                suggestions.add("좋아 ㅎㅎ 무슨 영화?")
-            }
-            text.contains("스파이더맨") -> {
-                suggestions.add("스파이더맨 좋아해?")
-                suggestions.add("이미엑스로 보던 좀을 것 같은데")
-            }
-        }
-
-        return suggestions
-    }
+    // MediaProjection 관련 메서드들은 더 이상 사용하지 않음 (AccessibilityService 사용)
 
     override fun onDestroy() {
         Log.d(TAG, "Service onDestroy 시작")
@@ -858,6 +541,12 @@ class FloatingButtonService :
                 Log.w(TAG, "ocrRetryReceiver 등록 해제 실패", e)
             }
             
+            try {
+                unregisterReceiver(screenshotReceiver)
+            } catch (e: Exception) {
+                Log.w(TAG, "screenshotReceiver 등록 해제 실패", e)
+            }
+            
             // 플로팅 뷰 제거
             removeFloatingView()
 
@@ -866,16 +555,6 @@ class FloatingButtonService :
                 textRecognizer.close()
             } catch (e: Exception) {
                 Log.w(TAG, "TextRecognizer 정리 실패", e)
-            }
-            
-            cleanupVirtualDisplay()
-            
-            // MediaProjection 정리
-            try {
-                mediaProjection?.stop()
-                mediaProjection = null
-            } catch (e: Exception) {
-                Log.w(TAG, "MediaProjection 정리 실패", e)
             }
             
             // 포그라운드 서비스 중지

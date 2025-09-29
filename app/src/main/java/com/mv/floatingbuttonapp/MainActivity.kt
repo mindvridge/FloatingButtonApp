@@ -145,7 +145,8 @@ class MainActivity : ComponentActivity() {
                     // 로그인되지 않은 경우: 로그인 화면
                     LoginScreen(
                         onKakaoLoginClick = { loginWithKakao() },
-                        onGoogleLoginClick = { loginWithGoogle() }
+                        onGoogleLoginClick = { loginWithGoogle() },
+                        onTestLoginClick = { loginWithTest() }
                     )
                 }
             }
@@ -259,6 +260,27 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "구글 로그인 오류: ${e.message}", Toast.LENGTH_SHORT).show()
             Log.e("MainActivity", "구글 로그인 오류", e)
+        }
+    }
+    
+    /**
+     * 테스트용 임시 로그인 실행
+     */
+    private fun loginWithTest() {
+        try {
+            // 테스트용 임시 사용자 정보로 로그인
+            isLoggedIn = true
+            currentUser = UserInfo(
+                userId = "test_user_001",
+                nickname = "테스트 사용자",
+                profileImageUrl = null,
+                email = "test@example.com"
+            )
+            Toast.makeText(this, "테스트 로그인 성공: ${currentUser?.nickname}", Toast.LENGTH_SHORT).show()
+            Log.d("MainActivity", "테스트 로그인 성공: ${currentUser?.nickname}")
+        } catch (e: Exception) {
+            Toast.makeText(this, "테스트 로그인 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+            Log.e("MainActivity", "테스트 로그인 오류", e)
         }
     }
 
@@ -711,7 +733,8 @@ fun MainScreen(
 @Composable
 fun LoginScreen(
     onKakaoLoginClick: () -> Unit,
-    onGoogleLoginClick: () -> Unit
+    onGoogleLoginClick: () -> Unit,
+    onTestLoginClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -870,6 +893,52 @@ fun LoginScreen(
                         text = "구글 계정으로 로그인",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFF333333),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // 테스트 로그인 버튼 (개발/테스트용)
+            Card(
+                onClick = onTestLoginClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF9C27B0) // 보라색으로 테스트 버튼임을 표시
+                ),
+                shape = MaterialTheme.shapes.medium,
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    // 테스트 아이콘 (T 로고)
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "T",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    Text(
+                        text = "테스트 로그인 (개발용)",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
                         modifier = Modifier.weight(1f)
                     )
                 }

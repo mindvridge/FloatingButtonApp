@@ -35,6 +35,14 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
     private var lastKeyboardState = false
     private val screenBounds = Rect()
     private var screenHeight = 0
+    
+    // 화면 캡처 권한 확인
+    private val isScreenCaptureEnabled: Boolean
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            serviceInfo?.capabilities?.and(AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0
+        } else {
+            false
+        }
 
     override fun onCreate() {
         super.onCreate()
@@ -187,37 +195,76 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 Log.d(TAG, "takeScreenshot() 호출됨")
+                
+                // 화면 캡처 권한 확인
+                if (!isScreenCaptureEnabled) {
+                    Log.e(TAG, "화면 캡처 권한이 없습니다")
+                    return null
+                }
+                
+                // 동기 처리를 위한 CountDownLatch 사용
+                val latch = java.util.concurrent.CountDownLatch(1)
+                var resultBitmap: Bitmap? = null
+                
                 takeScreenshot(
                     android.view.Display.DEFAULT_DISPLAY,
                     java.util.concurrent.Executors.newSingleThreadExecutor(),
                     object : AccessibilityService.TakeScreenshotCallback {
                         override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
                             Log.d(TAG, "화면 캡처 성공")
-                            // ScreenshotResult를 Bitmap으로 변환 (Android API에 따라 다를 수 있음)
                             try {
-                                // reflection을 사용하여 bitmap 속성에 접근
-                                val bitmapField = screenshot.javaClass.getDeclaredField("bitmap")
-                                bitmapField.isAccessible = true
-                                val bitmap = bitmapField.get(screenshot) as? Bitmap
+                                // ScreenshotResult에서 Bitmap 추출
+                                val bitmap = when {
+                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                                        // Android 11+ 에서는 HardwareBuffer 사용
+                                        val hardwareBuffer = screenshot.hardwareBuffer
+                                        if (hardwareBuffer != null) {
+                                            Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
+                                        } else {
+                                            null
+                                        }
+                                    }
+                                    else -> {
+                                        // 이전 버전에서는 reflection 사용
+                                        try {
+                                            val bitmapField = screenshot.javaClass.getDeclaredField("bitmap")
+                                            bitmapField.isAccessible = true
+                                            bitmapField.get(screenshot) as? Bitmap
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "reflection으로 bitmap 추출 실패", e)
+                                            null
+                                        }
+                                    }
+                                }
                                 
                                 bitmap?.let {
                                     Log.d(TAG, "화면 캡처 결과: ${it.width}x${it.height}")
-                                    // 화면 캡처 결과를 브로드캐스트로 전송
-                                    broadcastScreenshot(it)
+                                    resultBitmap = it
                                 } ?: run {
                                     Log.e(TAG, "화면 캡처 결과 bitmap이 null")
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "화면 캡처 결과 처리 중 오류", e)
+                            } finally {
+                                latch.countDown()
                             }
                         }
                         
                         override fun onFailure(errorCode: Int) {
                             Log.e(TAG, "화면 캡처 실패: errorCode = $errorCode")
+                            latch.countDown()
                         }
                     }
                 )
-                null // 비동기이므로 즉시 null 반환
+                
+                // 최대 5초 대기
+                if (latch.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    Log.d(TAG, "화면 캡처 완료")
+                    return resultBitmap
+                } else {
+                    Log.e(TAG, "화면 캡처 타임아웃")
+                    return null
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "화면 캡처 중 오류", e)
                 null
