@@ -19,10 +19,11 @@ object ApiClient {
     private val headerInterceptor = Interceptor { chain ->
         val original = chain.request()
         val requestBuilder = original.newBuilder()
-            .addHeader("Content-Type", "application/json; charset=utf-8")
+            .addHeader("Content-Type", "application/json")
             .addHeader("Accept", "application/json")
             .addHeader("User-Agent", "FloatingButtonApp/1.0")
             .addHeader("Cache-Control", "no-cache")
+            .addHeader("X-Requested-With", "XMLHttpRequest")
         val request = requestBuilder.build()
         Log.d("API_DEBUG", "Request headers: ${request.headers}")
         chain.proceed(request)
@@ -38,6 +39,8 @@ object ApiClient {
     
     private val gson = com.google.gson.GsonBuilder()
         .setLenient() // 더 관대한 JSON 파싱
+        .setPrettyPrinting() // JSON 포맷팅
+        .serializeNulls() // null 값도 직렬화
         .create()
     
     private val retrofit = Retrofit.Builder()

@@ -25,7 +25,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -111,7 +111,8 @@ class FloatingButtonService :
     private val ocrRetryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.mv.floatingbuttonapp.RETRY_OCR") {
-                captureScreen()
+                // captureScreen() // This is incorrect
+                handleButtonClick() // Correct: Reuse the full capture logic
             }
         }
     }
@@ -154,31 +155,31 @@ class FloatingButtonService :
             openAccessibilitySettings()
         }
 
-        // MediaProjection 초기화
-        if (mediaProjectionResultData != null && mediaProjectionResultCode != 0) {
-            try {
-                mediaProjection = mediaProjectionManager.getMediaProjection(
-                    mediaProjectionResultCode,
-                    mediaProjectionResultData!!
-                )
-                Log.d(TAG, "MediaProjection initialized successfully in onCreate")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize MediaProjection in onCreate: ${e.message}", e)
-                mediaProjection = null
-            }
-        } else {
-            Log.d(TAG, "No MediaProjection data available in onCreate")
-        }
-
         // 권한 확인 후 포그라운드 서비스 시작
         startForegroundService()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            "UPDATE_MEDIA_PROJECTION" -> {
-                updateMediaProjection()
-                Log.d(TAG, "MediaProjection updated from MainActivity")
+        // MainActivity로부터 MediaProjection 데이터를 받았을 때 객체를 생성하고 저장합니다.
+        if (mediaProjectionResultData != null && mediaProjection == null) {
+            try {
+                mediaProjection = mediaProjectionManager.getMediaProjection(
+                    mediaProjectionResultCode,
+                    mediaProjectionResultData!!
+                )
+                Log.d(TAG, "MediaProjection created and stored in service.")
+
+                // 프로젝션이 예기치 않게 중지될 때를 대비해 콜백을 등록합니다.
+                mediaProjection?.registerCallback(object : Callback() {
+                    override fun onStop() {
+                        Log.w(TAG, "MediaProjection was stopped unexpectedly. Cleaning up.")
+                        mediaProjection = null
+                    }
+                }, handler)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create MediaProjection onStartCommand: ${e.message}", e)
+                mediaProjection = null
             }
         }
         return START_STICKY
@@ -431,157 +432,62 @@ class FloatingButtonService :
 
     private fun handleButtonClick() {
         Log.d(TAG, "handleButtonClick() started")
-        try {
-            // 플로팅 버튼 잠시 숨기기
-            floatingView?.visibility = View.GONE
 
-            // MediaProjection이 준비되었는지 확인
-            if (mediaProjection == null) {
-                Log.d(TAG, "MediaProjection is null, checking if we have permission data...")
-                
-                // 권한 데이터가 있는지 확인
-                if (mediaProjectionResultData != null && mediaProjectionResultCode != 0) {
-                    Log.d(TAG, "Permission data exists, creating MediaProjection...")
-                    // 권한 데이터가 있으면 MediaProjection 생성 시도
-                    try {
-                        mediaProjection = mediaProjectionManager.getMediaProjection(
-                            mediaProjectionResultCode,
-                            mediaProjectionResultData!!
-                        )
-                        
-                        Log.d(TAG, "MediaProjection created successfully from existing data")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to create MediaProjection from existing data: ${e.message}", e)
-                        showPermissionRequestToast()
-                        return
-                    }
-                } else {
-                    Log.d(TAG, "No permission data, requesting permission...")
-                    showPermissionRequestToast()
-                    return
-                }
-            } else {
-                Log.d(TAG, "MediaProjection already exists, proceeding with capture...")
+        // 1. 서비스가 유효한 MediaProjection 객체를 가지고 있는지 확인합니다.
+        val currentProjection = mediaProjection
+        if (currentProjection == null) {
+            Log.e(TAG, "MediaProjection is not available. Requesting permission again.")
+            showPermissionRequestToast("화면 캡처 권한이 만료되었습니다. 앱을 열어 권한을 다시 허용해주세요.")
+
+            // MainActivity에 권한 재요청을 알립니다.
+            val intent = Intent(this, MainActivity::class.java).apply {
+                action = "REQUEST_MEDIA_PROJECTION"
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-
-            Log.d(TAG, "MediaProjection exists, proceeding with capture...")
-            // 화면 캡처 수행
-            captureScreen()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in handleButtonClick: ${e.message}", e)
-            Toast.makeText(this, "오류가 발생했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
-            
-            // 플로팅 버튼 다시 표시
-            handler.postDelayed({
-                floatingView?.visibility = View.VISIBLE
-            }, 1000)
-        }
-    }
-    
-    private fun showPermissionRequestToast() {
-        Toast.makeText(this, "화면 캡처 권한이 필요합니다. 앱을 열어서 권한을 허용해주세요.", Toast.LENGTH_LONG).show()
-        
-        // 플로팅 버튼 다시 표시
-        handler.postDelayed({
-            floatingView?.visibility = View.VISIBLE
-        }, 1000)
-    }
-
-    private fun captureScreen() {
-        Log.d(TAG, "captureScreen() started")
-        
-        // 기존 VirtualDisplay만 정리 (MediaProjection은 유지)
-        cleanupVirtualDisplay()
-        
-        Log.d(TAG, "Proceeding with capture...")
-
-        val metrics = resources.displayMetrics
-        
-        try {
-            imageReader = ImageReader.newInstance(
-                metrics.widthPixels,
-                metrics.heightPixels,
-                PixelFormat.RGBA_8888,
-                1
-            )
-            Log.d(TAG, "ImageReader created successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create ImageReader: ${e.message}", e)
-            Toast.makeText(this, "화면 캡처에 실패했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
-            
-            // 플로팅 버튼 다시 표시
-            handler.postDelayed({
-                floatingView?.visibility = View.VISIBLE
-            }, 1000)
+            startActivity(intent)
             return
         }
 
-        // MediaProjection 콜백 등록 (Android 14+ 필수)
-        try {
-            mediaProjection?.registerCallback(object : Callback() {
-                override fun onStop() {
-                    super.onStop()
-                    Log.d(TAG, "MediaProjection stopped")
-                    cleanupResources()
-                }
-            }, handler)
-            Log.d(TAG, "MediaProjection callback registered successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to register MediaProjection callback: ${e.message}", e)
-            // 콜백 등록 실패해도 계속 진행
-        }
+        // 2. 버튼을 숨기고 캡처를 진행합니다.
+        floatingView?.visibility = View.GONE
+        captureScreen(currentProjection) // 유효한 객체를 전달합니다.
+    }
+    private fun showPermissionRequestToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+
+        // 플로팅 버튼 다시 표시
+        handler.postDelayed({
+            floatingView?.visibility = View.VISIBLE
+        }, 500)
+    }
+
+
+    private fun captureScreen(projection: MediaProjection) {
+        Log.d(TAG, "captureScreen() started")
+
+        // VirtualDisplay와 ImageReader만 매번 새로 생성하고 정리합니다.
+        cleanupVirtualDisplay()
+
+        val metrics = resources.displayMetrics
 
         try {
-            // MediaProjection이 여전히 유효한지 다시 한번 확인
-            if (mediaProjection == null) {
-                Log.e(TAG, "MediaProjection is null when creating VirtualDisplay")
-                Toast.makeText(this, "화면 캡처 권한이 만료되었습니다. 앱을 열어서 권한을 다시 허용해주세요.", Toast.LENGTH_LONG).show()
-                handler.postDelayed({
-                    floatingView?.visibility = View.VISIBLE
-                }, 1000)
-                return
-            }
-            
-            virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "ScreenCapture",
-                metrics.widthPixels,
-                metrics.heightPixels,
-                metrics.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface,
-                null,
-                null
+            imageReader = ImageReader.newInstance(
+                metrics.widthPixels, metrics.heightPixels, PixelFormat.RGBA_8888, 2
             )
-            
-            if (virtualDisplay == null) {
-                Log.e(TAG, "VirtualDisplay creation returned null")
-                Toast.makeText(this, "화면 캡처에 실패했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
-                handler.postDelayed({
-                    floatingView?.visibility = View.VISIBLE
-                }, 1000)
-                return
-            }
-            
+
+            virtualDisplay = projection.createVirtualDisplay(
+                "ScreenCapture",
+                metrics.widthPixels, metrics.heightPixels, metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface, null, null
+            )
             Log.d(TAG, "VirtualDisplay created successfully")
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create VirtualDisplay: ${e.message}", e)
-            
-            // MediaProjection이 만료되었을 가능성이 높음
-            if (e.message?.contains("Don't re-use") == true || 
-                e.message?.contains("timed out") == true ||
-                e.message?.contains("SecurityException") == true) {
-                Log.d(TAG, "MediaProjection appears to be expired, will recreate on next attempt")
-                mediaProjection?.stop()
-                mediaProjection = null
-                Toast.makeText(this, "화면 캡처 권한이 만료되었습니다. 다시 시도해주세요.", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(this, "화면 캡처에 실패했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
-            }
-            
-            // 플로팅 버튼 다시 표시
-            handler.postDelayed({
-                floatingView?.visibility = View.VISIBLE
-            }, 1000)
+            showPermissionRequestToast("화면 캡처에 실패했습니다. 다시 시도해주세요.")
+            cleanupVirtualDisplay()
+            // 여기서 projection.stop()을 호출하지 않습니다. 서비스가 살아있는 동안 유지해야 합니다.
             return
         }
 
@@ -591,11 +497,12 @@ class FloatingButtonService :
                 val bitmap = convertImageToBitmap(image)
                 image.close()
 
-                // 가상 디스플레이만 정리 (MediaProjection은 유지)
+                // 중요: VirtualDisplay만 정리하고 MediaProjection 객체는 그대로 둡니다.
                 virtualDisplay?.release()
                 virtualDisplay = null
 
-                // OCR 처리
+                // projection.stop()을 호출하지 않습니다.
+
                 processOCR(bitmap)
             }
         }, handler)
@@ -687,7 +594,6 @@ class FloatingButtonService :
     override fun onDestroy() {
         savedStateRegistryController.performSave(Bundle())
         _viewModelStore.clear()
-        super.onDestroy()
 
         unregisterReceiver(keyboardStateReceiver)
         unregisterReceiver(ocrRetryReceiver)
@@ -698,6 +604,7 @@ class FloatingButtonService :
         cleanupVirtualDisplay()
         mediaProjection?.stop()
         mediaProjection = null
+        super.onDestroy()
     }
 }
 
@@ -718,15 +625,24 @@ fun FloatingButtonContent(
         FloatingActionButton(
             onClick = onButtonClick,
             modifier = Modifier
-                .size(56.dp)
-                .shadow(8.dp, CircleShape),
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = Color.White
+                .size(44.dp)  // 적당한 크기로 조정 (40dp → 44dp)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = CircleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.15f),
+                    spotColor = Color.Black.copy(alpha = 0.25f)
+                ),
+            containerColor = Color(0xFF2196F3),  // 깔끔한 파란색
+            contentColor = Color.White,
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 6.dp,
+                pressedElevation = 12.dp
+            )
         ) {
             Icon(
-                Icons.Default.CameraAlt,  // 카메라 아이콘으로 변경
-                contentDescription = "OCR 캡처",
-                modifier = Modifier.size(24.dp)
+                Icons.Default.TextFields,  // 텍스트 인식에 더 적합한 아이콘
+                contentDescription = "텍스트 인식",
+                modifier = Modifier.size(20.dp)  // 아이콘 크기 조정
             )
         }
     }

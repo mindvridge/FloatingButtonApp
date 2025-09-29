@@ -189,7 +189,7 @@ fun OcrBottomSheetContent(
 
     // 대상자 (단일 선택 유지) - 저장된 값으로 초기화
     var selectedSituation by remember { mutableStateOf(savedSituation) }
-    val situations = listOf("썸", "연인")
+    val situations = listOf("썸", "연인", "친구", "가족", "동료")
 
     // ✅ 답변 모드 (단일 선택으로 변경) - 저장된 값으로 초기화
     var selectedMood by remember { mutableStateOf(savedMood) }
@@ -683,8 +683,8 @@ suspend fun generateResponses(
     return try {
         // 실제 API에 맞는 요청 데이터 생성
         val request = ReplyRequest(
-            대상자 = situation, // 사용자가 선택한 대상자 사용
-            답변모드 = mood, // 사용자가 선택한 답변모드 사용
+            대상자 = mapSituationToApiValue(situation), // API가 기대하는 값으로 매핑
+            답변모드 = mapMoodToApiValue(mood), // API가 기대하는 값으로 매핑
             답변길이 = mapLengthToApiValue(length), // API가 기대하는 값으로 매핑
             대화내용 = context,
             추가지침 = "" // 추가지침은 빈 문자열로 설정
@@ -709,9 +709,8 @@ suspend fun generateResponses(
         }
 
         Log.d("API_DEBUG", "=== API Request Details ===")
-        Log.d("API_DEBUG", "대상자: '${request.대상자}'")
-        Log.d("API_DEBUG", "답변모드: '${request.답변모드}'")
-        Log.d("API_DEBUG", "답변길이: '${request.답변길이}'")
+        Log.d("API_DEBUG", "원본 값 - situation: '$situation', mood: '$mood', length: '$length'")
+        Log.d("API_DEBUG", "매핑된 값 - 대상자: '${request.대상자}', 답변모드: '${request.답변모드}', 답변길이: '${request.답변길이}'")
         Log.d("API_DEBUG", "대화내용: '${request.대화내용}'")
         Log.d("API_DEBUG", "추가지침: '${request.추가지침}'")
         Log.d("API_DEBUG", "Full Request: $request")
@@ -725,7 +724,19 @@ suspend fun generateResponses(
             Log.e("API_DEBUG", "JSON serialization failed: ${e.message}")
         }
         
+        // API 호출 시작 시간 기록
+        val startTime = System.currentTimeMillis()
+        Log.d("API_DEBUG", "=== API 호출 시작 ===")
+        Log.d("API_DEBUG", "시작 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(startTime))}")
+        
         val response = ApiClient.apiService.getReplies(request)
+        
+        // API 호출 완료 시간 기록
+        val endTime = System.currentTimeMillis()
+        val responseTime = endTime - startTime
+        Log.d("API_DEBUG", "=== API 호출 완료 ===")
+        Log.d("API_DEBUG", "완료 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(endTime))}")
+        Log.d("API_DEBUG", "응답 시간: ${responseTime}ms (${responseTime / 1000.0}초)")
         
         Log.d("API_DEBUG", "=== API Response Details ===")
         Log.d("API_DEBUG", "Response code: ${response.code()}")
@@ -757,11 +768,16 @@ suspend fun generateResponses(
             Log.e("API_ERROR", "Request was: $request")
             
             when (response.code()) {
-                422 -> listOf(
-                    "요청 데이터가 올바르지 않습니다. (422)",
-                    "오류: $errorMessage",
-                    "설정을 확인해주세요."
-                )
+                422 -> {
+                    Log.e("API_DEBUG", "422 Error Details: $errorMessage")
+                    Log.e("API_DEBUG", "Request that caused 422: $request")
+                    listOf(
+                        "요청 데이터가 올바르지 않습니다. (422)",
+                        "오류: $errorMessage",
+                        "설정을 확인해주세요.",
+                        "대상자: ${request.대상자}, 답변모드: ${request.답변모드}, 답변길이: ${request.답변길이}"
+                    )
+                }
                 400 -> listOf(
                     "잘못된 요청입니다. (400)",
                     "오류: $errorMessage",
@@ -800,6 +816,28 @@ fun extractRepliesFromResponse(response: com.mv.floatingbuttonapp.api.ReplyRespo
     }
     
     return emptyList()
+}
+
+// 대상자를 API가 기대하는 값으로 매핑하는 함수
+fun mapSituationToApiValue(situation: String): String {
+    return when (situation.lowercase()) {
+        "썸" -> "썸"
+        "연인" -> "연인"
+        "친구" -> "친구"
+        "가족" -> "가족"
+        "동료" -> "동료"
+        else -> "썸" // 기본값
+    }
+}
+
+// 답변모드를 API가 기대하는 값으로 매핑하는 함수
+fun mapMoodToApiValue(mood: String): String {
+    return when (mood.lowercase()) {
+        "질문형" -> "질문형"
+        "공감형" -> "공감형"
+        "호응형" -> "호응형"
+        else -> "공감형" // 기본값
+    }
 }
 
 // 길이를 API가 기대하는 값으로 매핑하는 함수

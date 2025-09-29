@@ -10,7 +10,8 @@ data class ReplyRequest(
     val 답변모드: String,
     val 답변길이: String,
     val 대화내용: String,
-    val 추가지침: String
+    val 추가지침: String,
+    val 모델: String = "gemini-2.5-flash" // gemini-2.5-flash 모델로 설정
 )
 
 // API 응답 데이터 클래스 (실제 API 응답에 맞게 수정)

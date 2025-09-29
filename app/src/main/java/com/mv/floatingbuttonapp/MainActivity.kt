@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,7 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.mv.floatingbuttonapp.ui.theme.FloatingButtonAppTheme
+import com.mv.floatingbuttonapp.api.ApiClient
+import com.mv.floatingbuttonapp.api.ReplyRequest
+import android.util.Log
 
 // 권한 정보를 담는 데이터 클래스
 data class PermissionInfo(
@@ -53,14 +58,14 @@ class MainActivity : ComponentActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.let { data ->
-                // MediaProjection 권한 획득 성공 - 정적 변수에 저장
                 FloatingButtonService.mediaProjectionResultCode = result.resultCode
+                // clone()을 사용하여 안전하게 Intent 복사
                 FloatingButtonService.mediaProjectionResultData = data.clone() as Intent
 
                 Toast.makeText(this, "화면 캡처 권한이 허용되었습니다", Toast.LENGTH_SHORT).show()
 
-                // 서비스 재시작 (MediaProjection 확실히 업데이트)
-                restartFloatingService()
+                // 서비스를 재시작하는 대신, 시작만 하여 onStartCommand를 호출합니다.
+                startFloatingService()
             }
         } else {
             Toast.makeText(
@@ -98,6 +103,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onStopServiceClick = {
                         stopFloatingService()
+                    },
+                    onTestApiClick = {
+                        testApiResponseTime()
                     }
                 )
             }
@@ -226,6 +234,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // API 응답 시간 테스트 함수
+    fun testApiResponseTime() {
+        lifecycleScope.launch {
+            try {
+                val testRequest = ReplyRequest(
+                    대상자 = "친구",
+                    답변모드 = "친근하게", 
+                    답변길이 = "짧게",
+                    대화내용 = "안녕하세요! 오늘 날씨가 정말 좋네요.",
+                    추가지침 = "",
+                    모델 = "gemini-2.5-flash"
+                )
+                
+                val startTime = System.currentTimeMillis()
+                Log.d("API_TEST", "=== API 테스트 시작 ===")
+                Log.d("API_TEST", "시작 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(startTime))}")
+                
+                val response = ApiClient.apiService.getReplies(testRequest)
+                
+                val endTime = System.currentTimeMillis()
+                val responseTime = endTime - startTime
+                
+                Log.d("API_TEST", "=== API 테스트 완료 ===")
+                Log.d("API_TEST", "완료 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(endTime))}")
+                Log.d("API_TEST", "응답 시간: ${responseTime}ms (${responseTime / 1000.0}초)")
+                Log.d("API_TEST", "응답 코드: ${response.code()}")
+                Log.d("API_TEST", "응답 성공: ${response.isSuccessful}")
+                
+                if (response.isSuccessful) {
+                    val responseBody = response.body()
+                    Log.d("API_TEST", "응답 내용: $responseBody")
+                    Toast.makeText(this@MainActivity, "API 테스트 성공! 응답시간: ${responseTime}ms", Toast.LENGTH_LONG).show()
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e("API_TEST", "API 오류: ${response.code()} - $errorBody")
+                    Toast.makeText(this@MainActivity, "API 테스트 실패: ${response.code()}", Toast.LENGTH_LONG).show()
+                }
+                
+            } catch (e: Exception) {
+                Log.e("API_TEST", "API 테스트 예외: ${e.message}", e)
+                Toast.makeText(this@MainActivity, "API 테스트 오류: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     fun hasCameraPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             this,
@@ -345,7 +398,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(
     onStartServiceClick: () -> Unit,
-    onStopServiceClick: () -> Unit
+    onStopServiceClick: () -> Unit,
+    onTestApiClick: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activity = context as MainActivity
@@ -497,6 +551,19 @@ fun MainScreen(
                 ) {
                     Text("서비스 중지")
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // API 테스트 버튼
+            Button(
+                onClick = onTestApiClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Text("API 응답 시간 테스트")
             }
         }
     }
