@@ -12,8 +12,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- 화면 캡처를 위한 권한 (MediaProjection) -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- 화면 캡처는 AccessibilityService를 통해 수행하므로 MediaProjection 권한 불필요 -->
 
     <!-- Android 10 이하를 위한 저장소 권한 (선택적) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -24,6 +23,10 @@
     <!-- 접근성 서비스를 위한 권한 -->
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
         tools:ignore="ProtectedPermissions" />
+    
+    <!-- 화면 캡처를 위한 권한 (AccessibilityService) -->
+    <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT" />
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" />
 
     <!-- ML Kit OCR 기능을 위한 feature -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -92,7 +95,7 @@
             android:name=".FloatingButtonService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse|mediaProjection">
+            android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="floating-widget-with-screen-capture" />

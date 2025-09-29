@@ -56,21 +56,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
-import java.util.regex.Pattern
 
-// 대화 분석을 위한 데이터 클래스
-data class ConversationMessage(
-    val speaker: String, // "나" 또는 "상대방"
-    val content: String,
-    val timestamp: String? = null
-)
-
-data class ConversationAnalysis(
-    val myMessages: List<ConversationMessage>,
-    val otherMessages: List<ConversationMessage>,
-    val conversationSummary: String,
-    val context: String
-)
 
 class OcrBottomSheetActivity : ComponentActivity() {
 
@@ -85,8 +71,15 @@ class OcrBottomSheetActivity : ComponentActivity() {
         // 키보드와 함께 레이아웃 조정
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        val ocrText = intent.getStringExtra(EXTRA_OCR_TEXT) ?: ""
-        val suggestions = intent.getStringArrayListExtra(EXTRA_SUGGESTIONS) ?: arrayListOf()
+        // OCR 텍스트와 추천 답변
+        val ocrText = intent.getStringExtra("extracted_text") ?: intent.getStringExtra(EXTRA_OCR_TEXT) ?: ""
+        val suggestions = intent.getStringArrayListExtra("suggestions") ?: intent.getStringArrayListExtra(EXTRA_SUGGESTIONS) ?: arrayListOf()
+        
+        // 디버깅을 위한 로그
+        Log.d("OcrBottomSheet", "받은 OCR 텍스트: '$ocrText'")
+        Log.d("OcrBottomSheet", "받은 추천 답변: $suggestions")
+        Log.d("OcrBottomSheet", "Intent extras: ${intent.extras?.keySet()}")
+        
 
         setContent {
             MaterialTheme {
@@ -177,8 +170,6 @@ fun OcrBottomSheetContent(
     var showResponseOptions by remember { mutableStateOf(false) }
     var generatedResponses by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
-    var conversationAnalysis by remember { mutableStateOf<ConversationAnalysis?>(null) }
-    var showConversationAnalysis by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     
     // SharedPreferences를 사용하여 선택된 내용 저장/불러오기
@@ -493,44 +484,15 @@ fun OcrBottomSheetContent(
                             )
                         }
 
-                        // 생성 버튼 (필드 형태는 유지)
-                        OutlinedTextField(
-                            value = "추천 답변",
-                            onValueChange = {},
-                            enabled = false,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            trailingIcon = {
-                                if (isLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color(0xFF0066CC)
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Default.Send,
-                                        contentDescription = "생성",
-                                        tint = Color(0xFF0066CC)
-                                    )
-                                }
-                            }
-                        )
                     }
                 } else {
-                    // 기존 OCR 기본 화면 (변경 없음)
+                    // 인식된 텍스트만 표시
                     Text(
-                        text = "대화 내용이 등록되었습니다.",
-                        fontSize = 14.sp,
-                        color = Color.Gray,
+                        text = "인식된 텍스트",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2C3E50),
                         modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    Text(
-                        text = "OCR 인식 결과 :",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Card(
                         modifier = Modifier
@@ -544,28 +506,8 @@ fun OcrBottomSheetContent(
                                 .fillMaxSize()
                                 .padding(12.dp)
                         ) {
-                            if (suggestions.isNotEmpty() && !isEditMode) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState())
-                                ) {
-                                    suggestions.forEach { suggestion ->
-                                        Text(
-                                            text = suggestion,
-                                            fontSize = 14.sp,
-                                            color = Color(0xFF666666),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    ocrText = suggestion
-                                                    isEditMode = true
-                                                }
-                                                .padding(vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                            } else {
+                            if (ocrText.isNotEmpty()) {
+                                // OCR 텍스트가 있는 경우
                                 OutlinedTextField(
                                     value = ocrText,
                                     onValueChange = {
@@ -583,6 +525,42 @@ fun OcrBottomSheetContent(
                                         fontSize = 14.sp,
                                         color = Color(0xFF333333)
                                     )
+                                )
+                            } else if (suggestions.isNotEmpty()) {
+                                // OCR 텍스트가 없고 추천 답변만 있는 경우
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(
+                                        text = "인식된 텍스트가 없습니다. 추천 답변을 확인해주세요:",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF666666),
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    suggestions.forEach { suggestion ->
+                                        Text(
+                                            text = suggestion,
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF666666),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    ocrText = suggestion
+                                                    isEditMode = true
+                                                }
+                                                .padding(vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                // 아무것도 없는 경우
+                                Text(
+                                    text = "인식된 텍스트가 없습니다.",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF999999),
+                                    modifier = Modifier.align(Alignment.Center)
                                 )
                             }
                         }
@@ -638,21 +616,6 @@ fun OcrBottomSheetContent(
                                 Text("다시 선택")
                             }
 
-                            OutlinedButton(
-                                onClick = {
-                                    conversationAnalysis = analyzeConversation(ocrText)
-                                    showConversationAnalysis = true
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(24.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color(0xFF4A90E2)
-                                )
-                            ) {
-                                Icon(Icons.Default.Analytics, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("대화 분석")
-                            }
 
                             Button(
                                 onClick = { 
@@ -703,13 +666,6 @@ fun OcrBottomSheetContent(
                     ) { Text("텍스트가 복사되었습니다") }
                 }
 
-                // 대화 분석 다이얼로그
-                if (showConversationAnalysis && conversationAnalysis != null) {
-                    ConversationAnalysisDialog(
-                        analysis = conversationAnalysis!!,
-                        onDismiss = { showConversationAnalysis = false }
-                    )
-                }
             }
         }
     }
@@ -893,352 +849,4 @@ fun mapLengthToApiValue(length: String): String {
     }
 }
 
-// OCR 텍스트에서 대화 내용을 분석하여 상대방과 내 대화를 분류하는 함수
-fun analyzeConversation(ocrText: String): ConversationAnalysis {
-    Log.d("CONVERSATION_ANALYSIS", "=== 대화 분석 시작 ===")
-    Log.d("CONVERSATION_ANALYSIS", "원본 OCR 텍스트: $ocrText")
-    
-    val myMessages = mutableListOf<ConversationMessage>()
-    val otherMessages = mutableListOf<ConversationMessage>()
-    
-    // 대화 패턴 분석을 위한 정규식들
-    val patterns = listOf(
-        // 시간 패턴 (오전/오후, 24시간 형식)
-        Pattern.compile("(오전|오후)\\s*\\d{1,2}:\\d{2}"),
-        Pattern.compile("\\d{1,2}:\\d{2}"),
-        Pattern.compile("\\d{1,2}시\\s*\\d{1,2}분"),
-        
-        // 이름 패턴 (한글 이름, 영어 이름)
-        Pattern.compile("[가-힣]{2,4}\\s*:"),
-        Pattern.compile("[A-Za-z]{2,10}\\s*:"),
-        
-        // 메신저 앱 패턴
-        Pattern.compile("(나|내가|저는|제가)\\s*:"),
-        Pattern.compile("(상대방|친구|가족|동료)\\s*:"),
-        
-        // 일반적인 대화 시작 패턴
-        Pattern.compile("(안녕|하이|헬로|좋은|오늘|어제|내일)"),
-        Pattern.compile("(고마워|감사|미안|죄송|괜찮아|응|네|아니|그래)")
-    )
-    
-    // 텍스트를 줄 단위로 분할
-    val lines = ocrText.split("\n").filter { it.trim().isNotEmpty() }
-    
-    var currentSpeaker = "상대방" // 기본값
-    var currentMessage = StringBuilder()
-    
-    for (line in lines) {
-        val trimmedLine = line.trim()
-        if (trimmedLine.isEmpty()) continue
-        
-        Log.d("CONVERSATION_ANALYSIS", "분석 중인 줄: $trimmedLine")
-        
-        // 시간 패턴 확인
-        val hasTimePattern = patterns[0].matcher(trimmedLine).find() || 
-                            patterns[1].matcher(trimmedLine).find() || 
-                            patterns[2].matcher(trimmedLine).find()
-        
-        // 이름 패턴 확인
-        val hasNamePattern = patterns[3].matcher(trimmedLine).find() || 
-                            patterns[4].matcher(trimmedLine).find()
-        
-        // 메신저 앱 패턴 확인
-        val hasMessengerPattern = patterns[5].matcher(trimmedLine).find() || 
-                                 patterns[6].matcher(trimmedLine).find()
-        
-        // 대화 시작 패턴 확인
-        val hasConversationPattern = patterns[7].matcher(trimmedLine).find() || 
-                                    patterns[8].matcher(trimmedLine).find()
-        
-        when {
-            // 시간 패턴이 있으면 새로운 대화 시작
-            hasTimePattern -> {
-                // 이전 메시지 저장
-                if (currentMessage.isNotEmpty()) {
-                    val message = ConversationMessage(
-                        speaker = currentSpeaker,
-                        content = currentMessage.toString().trim(),
-                        timestamp = null
-                    )
-                    if (currentSpeaker == "나") {
-                        myMessages.add(message)
-                    } else {
-                        otherMessages.add(message)
-                    }
-                    currentMessage.clear()
-                }
-                currentSpeaker = "상대방" // 시간 패턴 후에는 상대방 메시지로 가정
-            }
-            
-            // 이름 패턴이 있으면 화자 변경
-            hasNamePattern -> {
-                // 이전 메시지 저장
-                if (currentMessage.isNotEmpty()) {
-                    val message = ConversationMessage(
-                        speaker = currentSpeaker,
-                        content = currentMessage.toString().trim(),
-                        timestamp = null
-                    )
-                    if (currentSpeaker == "나") {
-                        myMessages.add(message)
-                    } else {
-                        otherMessages.add(message)
-                    }
-                    currentMessage.clear()
-                }
-                
-                // 화자 판단
-                currentSpeaker = when {
-                    trimmedLine.contains("나") || trimmedLine.contains("내가") || 
-                    trimmedLine.contains("저는") || trimmedLine.contains("제가") -> "나"
-                    else -> "상대방"
-                }
-            }
-            
-            // 메신저 앱 패턴이 있으면 화자 변경
-            hasMessengerPattern -> {
-                // 이전 메시지 저장
-                if (currentMessage.isNotEmpty()) {
-                    val message = ConversationMessage(
-                        speaker = currentSpeaker,
-                        content = currentMessage.toString().trim(),
-                        timestamp = null
-                    )
-                    if (currentSpeaker == "나") {
-                        myMessages.add(message)
-                    } else {
-                        otherMessages.add(message)
-                    }
-                    currentMessage.clear()
-                }
-                
-                // 화자 판단
-                currentSpeaker = when {
-                    trimmedLine.contains("나") || trimmedLine.contains("내가") || 
-                    trimmedLine.contains("저는") || trimmedLine.contains("제가") -> "나"
-                    else -> "상대방"
-                }
-            }
-            
-            // 대화 시작 패턴이 있으면 새로운 메시지 시작
-            hasConversationPattern -> {
-                // 이전 메시지 저장
-                if (currentMessage.isNotEmpty()) {
-                    val message = ConversationMessage(
-                        speaker = currentSpeaker,
-                        content = currentMessage.toString().trim(),
-                        timestamp = null
-                    )
-                    if (currentSpeaker == "나") {
-                        myMessages.add(message)
-                    } else {
-                        otherMessages.add(message)
-                    }
-                    currentMessage.clear()
-                }
-                currentSpeaker = "상대방" // 대화 시작은 상대방으로 가정
-            }
-        }
-        
-        // 현재 줄을 메시지에 추가
-        if (currentMessage.isNotEmpty()) {
-            currentMessage.append(" ")
-        }
-        currentMessage.append(trimmedLine)
-    }
-    
-    // 마지막 메시지 저장
-    if (currentMessage.isNotEmpty()) {
-        val message = ConversationMessage(
-            speaker = currentSpeaker,
-            content = currentMessage.toString().trim(),
-            timestamp = null
-        )
-        if (currentSpeaker == "나") {
-            myMessages.add(message)
-        } else {
-            otherMessages.add(message)
-        }
-    }
-    
-    // 대화 요약 생성
-    val conversationSummary = generateConversationSummary(myMessages, otherMessages)
-    
-    // 분석 결과 로깅
-    Log.d("CONVERSATION_ANALYSIS", "=== 대화 분석 결과 ===")
-    Log.d("CONVERSATION_ANALYSIS", "내 메시지 수: ${myMessages.size}")
-    Log.d("CONVERSATION_ANALYSIS", "상대방 메시지 수: ${otherMessages.size}")
-    Log.d("CONVERSATION_ANALYSIS", "내 메시지: ${myMessages.map { it.content }}")
-    Log.d("CONVERSATION_ANALYSIS", "상대방 메시지: ${otherMessages.map { it.content }}")
-    
-    return ConversationAnalysis(
-        myMessages = myMessages,
-        otherMessages = otherMessages,
-        conversationSummary = conversationSummary,
-        context = ocrText
-    )
-}
-
-// 대화 요약을 생성하는 함수
-fun generateConversationSummary(myMessages: List<ConversationMessage>, otherMessages: List<ConversationMessage>): String {
-    val allMessages = (myMessages + otherMessages).sortedBy { it.content.length }
-    
-    return when {
-        allMessages.isEmpty() -> "대화 내용이 없습니다."
-        allMessages.size == 1 -> "단일 메시지: ${allMessages.first().content}"
-        allMessages.size <= 3 -> "짧은 대화: ${allMessages.joinToString(" | ") { it.content.take(20) }}"
-        else -> "긴 대화 (${allMessages.size}개 메시지): ${allMessages.take(3).joinToString(" | ") { it.content.take(15) }}..."
-    }
-}
-
-// 대화 분석 결과를 표시하는 다이얼로그
-@Composable
-fun ConversationAnalysisDialog(
-    analysis: ConversationAnalysis,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                // 헤더
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "대화 분석 결과",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2C3E50)
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "닫기",
-                            tint = Color.Gray
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // 대화 요약
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Text(
-                            text = "대화 요약",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF4A90E2)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = analysis.conversationSummary,
-                            fontSize = 12.sp,
-                            color = Color(0xFF2C3E50)
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // 내 메시지
-                if (analysis.myMessages.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                            Text(
-                                text = "내 메시지 (${analysis.myMessages.size}개)",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF27AE60)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            analysis.myMessages.forEach { message ->
-                                Text(
-                                    text = "• ${message.content}",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF2C3E50),
-                                    modifier = Modifier.padding(vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-                
-                // 상대방 메시지
-                if (analysis.otherMessages.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                            Text(
-                                text = "상대방 메시지 (${analysis.otherMessages.size}개)",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFFE67E22)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            analysis.otherMessages.forEach { message ->
-                                Text(
-                                    text = "• ${message.content}",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF2C3E50),
-                                    modifier = Modifier.padding(vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                // 닫기 버튼
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4A90E2)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("확인", color = Color.White)
-                }
-            }
-        }
-    }
-}
 
