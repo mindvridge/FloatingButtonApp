@@ -19,16 +19,13 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
         @Volatile
         var instance: KeyboardDetectionAccessibilityService? = null
-            private set
 
         // 키보드 상태를 전역적으로 확인할 수 있는 변수
         @Volatile
         var isKeyboardVisible = false
-            private set
 
         @Volatile
         var keyboardHeight = 0
-            private set
     }
 
     private var lastKeyboardState = false

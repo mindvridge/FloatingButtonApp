@@ -30,6 +30,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
+        android:name=".FloatingButtonApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -45,6 +46,11 @@
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="ocr,ocr_korean" />
+
+        <!-- 카카오 SDK 앱 키 -->
+        <meta-data
+            android:name="com.kakao.sdk.AppKey"
+            android:value="@string/kakao_app_key" />
 
         <!-- 메인 액티비티 -->
         <activity
@@ -68,6 +74,18 @@
             android:screenOrientation="portrait"
             android:excludeFromRecents="true"
             android:taskAffinity="com.mv.floatingbuttonapp.ocr" />
+
+        <!-- 카카오 로그인 콜백 액티비티 -->
+        <activity
+            android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kakaoisvE7ZI2Vn2ABFXKNgV9ld7MPaKJGrrn" />
+            </intent-filter>
+        </activity>
 
         <!-- 플로팅 버튼 서비스 -->
         <service

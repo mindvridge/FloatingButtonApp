@@ -142,7 +142,11 @@ class FloatingButtonService :
 
         updateScreenDimensions()
         registerKeyboardReceiver()
+        
+        // 알림 채널 생성
+        createNotificationChannel()
 
+        // 권한 확인
         if (!Settings.canDrawOverlays(this)) {
             Log.e(TAG, "Overlay permission not granted")
             Toast.makeText(this, "다른 앱 위에 표시 권한이 필요합니다.", Toast.LENGTH_LONG).show()
@@ -151,37 +155,56 @@ class FloatingButtonService :
         }
 
         if (!isAccessibilityServiceEnabled()) {
+            Log.e(TAG, "Accessibility service not enabled")
             Toast.makeText(this, "접근성 서비스를 활성화해주세요", Toast.LENGTH_LONG).show()
-            openAccessibilitySettings()
+            stopSelf()
+            return
         }
 
         // 권한 확인 후 포그라운드 서비스 시작
-        startForegroundService()
+        try {
+            startForegroundService()
+            Log.d(TAG, "포그라운드 서비스 시작됨")
+        } catch (e: Exception) {
+            Log.e(TAG, "포그라운드 서비스 시작 실패", e)
+            Toast.makeText(this, "서비스 시작 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand called")
+        
         // MainActivity로부터 MediaProjection 데이터를 받았을 때 객체를 생성하고 저장합니다.
-        if (mediaProjectionResultData != null && mediaProjection == null) {
-            try {
-                mediaProjection = mediaProjectionManager.getMediaProjection(
-                    mediaProjectionResultCode,
-                    mediaProjectionResultData!!
-                )
-                Log.d(TAG, "MediaProjection created and stored in service.")
+        if (intent?.hasExtra("resultCode") == true && intent.hasExtra("data")) {
+            val resultCode = intent.getIntExtra("resultCode", 0)
+            val data = intent.getParcelableExtra<Intent>("data")
+            
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                try {
+                    mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
+                    Log.d(TAG, "MediaProjection created and stored in service.")
 
-                // 프로젝션이 예기치 않게 중지될 때를 대비해 콜백을 등록합니다.
-                mediaProjection?.registerCallback(object : Callback() {
-                    override fun onStop() {
-                        Log.w(TAG, "MediaProjection was stopped unexpectedly. Cleaning up.")
-                        mediaProjection = null
-                    }
-                }, handler)
+                    // 프로젝션이 예기치 않게 중지될 때를 대비해 콜백을 등록합니다.
+                    mediaProjection?.registerCallback(object : Callback() {
+                        override fun onStop() {
+                            Log.w(TAG, "MediaProjection was stopped unexpectedly. Cleaning up.")
+                            mediaProjection = null
+                        }
+                    }, handler)
 
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to create MediaProjection onStartCommand: ${e.message}", e)
-                mediaProjection = null
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to create MediaProjection onStartCommand: ${e.message}", e)
+                    mediaProjection = null
+                }
             }
         }
+        
+        // 플로팅 버튼은 키보드 상태에 따라 동적으로 생성/제거
+        // 초기에는 키보드가 비활성화 상태이므로 플로팅 버튼을 생성하지 않음
+        // 키보드 상태 확인 후 필요시 플로팅 버튼 생성
+        checkInitialKeyboardState()
+        
         return START_STICKY
     }
 
@@ -320,6 +343,23 @@ class FloatingButtonService :
         lastButtonXPosition = screenWidth - 200
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "플로팅 버튼 서비스",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "플로팅 버튼 서비스 알림"
+                setShowBadge(false)
+            }
+            
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "알림 채널 생성됨: $CHANNEL_ID")
+        }
+    }
+
     private fun startForegroundService() {
         startForeground(NOTIFICATION_ID, createNotification())
     }
@@ -327,12 +367,13 @@ class FloatingButtonService :
     private fun createNotification(): Notification {
         // 알림 클릭 시 앱을 열지 않도록 null로 설정
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("플로팅 버튼 대기 중")
-            .setContentText("키보드 활성화를 감지합니다.")
+            .setContentTitle("플로팅 버튼 서비스")
+            .setContentText("플로팅 버튼이 활성화되었습니다")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(null) // 앱을 열지 않도록 null로 설정
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 
@@ -401,26 +442,50 @@ class FloatingButtonService :
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = lastButtonXPosition
-            y = lastButtonYPosition
+            // 초기 위치를 화면 하단으로 설정
+            y = screenHeight - 200
         }
     }
 
     private fun onKeyboardShown(keyboardHeight: Int) {
-        if (!isKeyboardVisible) {
-            isKeyboardVisible = true
+        Log.d(TAG, "키보드 표시됨, 높이: $keyboardHeight")
+        isKeyboardVisible = true
+        
+        // 플로팅 버튼이 없으면 생성
+        if (floatingView == null) {
             createFloatingView()
         }
-
+        
+        // 키보드 높이에 맞춰 위치 조정
         floatingView?.let {
             layoutParams.y = screenHeight - keyboardHeight - 200
             windowManager.updateViewLayout(it, layoutParams)
+            Log.d(TAG, "플로팅 버튼 위치 조정: y = ${layoutParams.y}")
         }
     }
 
     private fun onKeyboardHidden() {
-        if (isKeyboardVisible) {
-            isKeyboardVisible = false
-            removeFloatingView()
+        Log.d(TAG, "키보드 숨겨짐")
+        isKeyboardVisible = false
+        
+        // 키보드가 숨겨지면 플로팅 버튼 제거
+        removeFloatingView()
+    }
+    
+    private fun checkInitialKeyboardState() {
+        // 접근성 서비스를 통해 현재 키보드 상태 확인
+        val accessibilityService = KeyboardDetectionAccessibilityService.instance
+        if (accessibilityService != null) {
+            val isKeyboardCurrentlyVisible = KeyboardDetectionAccessibilityService.isKeyboardVisible
+            Log.d(TAG, "초기 키보드 상태 확인: $isKeyboardCurrentlyVisible")
+            
+            if (isKeyboardCurrentlyVisible) {
+                // 키보드가 이미 활성화되어 있으면 플로팅 버튼 생성
+                val keyboardHeight = KeyboardDetectionAccessibilityService.keyboardHeight
+                onKeyboardShown(keyboardHeight)
+            }
+        } else {
+            Log.d(TAG, "접근성 서비스가 아직 초기화되지 않음, 플로팅 버튼 생성 안함")
         }
     }
 
@@ -592,19 +657,58 @@ class FloatingButtonService :
     }
 
     override fun onDestroy() {
-        savedStateRegistryController.performSave(Bundle())
-        _viewModelStore.clear()
+        Log.d(TAG, "Service onDestroy 시작")
+        
+        try {
+            savedStateRegistryController.performSave(Bundle())
+            _viewModelStore.clear()
 
-        unregisterReceiver(keyboardStateReceiver)
-        unregisterReceiver(ocrRetryReceiver)
-        removeFloatingView()
+            // 리시버 등록 해제
+            try {
+                unregisterReceiver(keyboardStateReceiver)
+            } catch (e: Exception) {
+                Log.w(TAG, "keyboardStateReceiver 등록 해제 실패", e)
+            }
+            
+            try {
+                unregisterReceiver(ocrRetryReceiver)
+            } catch (e: Exception) {
+                Log.w(TAG, "ocrRetryReceiver 등록 해제 실패", e)
+            }
+            
+            // 플로팅 뷰 제거
+            removeFloatingView()
 
-        // OCR 리소스 정리
-        textRecognizer.close()
-        cleanupVirtualDisplay()
-        mediaProjection?.stop()
-        mediaProjection = null
-        super.onDestroy()
+            // OCR 리소스 정리
+            try {
+                textRecognizer.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "TextRecognizer 정리 실패", e)
+            }
+            
+            cleanupVirtualDisplay()
+            
+            // MediaProjection 정리
+            try {
+                mediaProjection?.stop()
+                mediaProjection = null
+            } catch (e: Exception) {
+                Log.w(TAG, "MediaProjection 정리 실패", e)
+            }
+            
+            // 포그라운드 서비스 중지
+            try {
+                stopForeground(true)
+            } catch (e: Exception) {
+                Log.w(TAG, "포그라운드 서비스 중지 실패", e)
+            }
+
+            Log.d(TAG, "Service onDestroy 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "Service onDestroy 중 오류", e)
+        } finally {
+            super.onDestroy()
+        }
     }
 }
 
