@@ -54,7 +54,18 @@ import java.nio.ByteBuffer
 import kotlin.math.roundToInt
 
 /**
- * OCR 분석 결과 데이터 클래스
+ * OCR 분석 결과를 담는 데이터 클래스
+ * 
+ * ML Kit OCR과 AI 분석을 통해 추출된 텍스트의 상세 정보를 포함합니다.
+ * 
+ * @param originalText OCR로 추출된 원본 텍스트
+ * @param textType 텍스트의 분류 타입 (질문, 메시지, URL 등)
+ * @param confidence OCR 인식 신뢰도 (0.0 ~ 1.0)
+ * @param language 감지된 언어 코드 (ko, en, mixed 등)
+ * @param suggestions AI가 생성한 추천 답변 목록
+ * @param keywords 텍스트에서 추출된 주요 키워드
+ * @param entities 텍스트에서 추출된 엔티티 정보 (이메일, 전화번호 등)
+ * @param chatAnalysis 채팅 메시지 분석 결과 (메시지 타입인 경우)
  */
 data class OcrAnalysis(
     val originalText: String,           // 원본 텍스트
@@ -157,26 +168,96 @@ enum class EntityType {
     MENTION            // 멘션
 }
 
+/**
+ * 플로팅 버튼 서비스 클래스
+ * 
+ * 이 서비스는 앱의 핵심 기능을 담당하며 다음과 같은 역할을 수행합니다:
+ * - 키보드 상태 감지 및 플로팅 버튼 동적 표시/숨김
+ * - 화면 캡처 및 OCR 텍스트 인식
+ * - AI 기반 텍스트 분석 및 답변 추천
+ * - 포그라운드 서비스로 백그라운드 실행
+ * - 접근성 서비스와의 통신
+ * 
+ * 주요 생명주기:
+ * 1. onCreate: 서비스 초기화 및 권한 확인
+ * 2. onStartCommand: 키보드 상태 확인 및 플로팅 버튼 생성
+ * 3. onDestroy: 리소스 정리 및 서비스 종료
+ * 
+ * @author FloatingButtonApp Team
+ * @version 1.0
+ * @since 2024
+ */
 class FloatingButtonService :
     LifecycleService(),
     ViewModelStoreOwner,
     SavedStateRegistryOwner {
 
+    // ==================== UI 관리 ====================
+    
+    /**
+     * 윈도우 매니저 인스턴스
+     * 플로팅 버튼을 화면에 표시하기 위해 사용
+     */
     private lateinit var windowManager: WindowManager
+    
+    /**
+     * 플로팅 버튼 뷰
+     * ComposeView로 구현된 플로팅 버튼 UI
+     */
     private var floatingView: View? = null
+    
+    /**
+     * 플로팅 버튼의 레이아웃 파라미터
+     * 위치, 크기, 타입 등의 속성 설정
+     */
     private lateinit var layoutParams: WindowManager.LayoutParams
 
-    // 화면/키보드 상태
+    // ==================== 화면/키보드 상태 관리 ====================
+    
+    /**
+     * 현재 키보드 표시 상태
+     * true: 키보드 표시됨, false: 키보드 숨겨짐
+     */
     private var isKeyboardVisible = false
+    
+    /**
+     * 플로팅 버튼의 마지막 X 좌표
+     * 드래그로 이동한 위치를 기억하기 위해 사용
+     */
     private var lastButtonXPosition = 0
+    
+    /**
+     * 플로팅 버튼의 마지막 Y 좌표
+     * 드래그로 이동한 위치를 기억하기 위해 사용
+     */
     private var lastButtonYPosition = 300
+    
+    /**
+     * 화면 높이 (픽셀 단위)
+     * 플로팅 버튼 위치 계산에 사용
+     */
     private var screenHeight = 0
+    
+    /**
+     * 화면 너비 (픽셀 단위)
+     * 플로팅 버튼 위치 계산에 사용
+     */
     private var screenWidth = 0
 
     // 화면 캡처는 AccessibilityService를 통해 수행
 
-    // OCR 관련
+    // ==================== OCR 관련 ====================
+    
+    /**
+     * ML Kit 텍스트 인식기
+     * 한국어 지원 OCR 기능 제공
+     */
     private lateinit var textRecognizer: TextRecognizer
+    
+    /**
+     * 메인 스레드 핸들러
+     * UI 업데이트 및 비동기 작업 처리를 위해 사용
+     */
     private val handler = Handler(Looper.getMainLooper())
 
     private val _viewModelStore: ViewModelStore = ViewModelStore()

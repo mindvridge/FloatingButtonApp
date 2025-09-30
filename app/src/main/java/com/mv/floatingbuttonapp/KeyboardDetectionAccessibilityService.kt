@@ -11,23 +11,58 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 
+/**
+ * 키보드 감지 및 화면 캡처 접근성 서비스
+ * 
+ * 이 서비스는 접근성 서비스의 권한을 활용하여 다음과 같은 기능을 제공합니다:
+ * - 키보드 표시/숨김 상태 실시간 감지
+ * - 키보드 높이 측정 및 브로드캐스트 전송
+ * - Android 11+ 화면 캡처 기능 제공
+ * - FloatingButtonService와의 통신
+ * 
+ * 주요 동작:
+ * 1. 윈도우 상태 변경 감지로 키보드 상태 확인
+ * 2. IME 윈도우 및 화면 영역 분석으로 키보드 높이 계산
+ * 3. 브로드캐스트를 통해 다른 서비스에 상태 전달
+ * 4. 화면 캡처 요청 시 AccessibilityService의 takeScreenshot() 사용
+ * 
+ * @author FloatingButtonApp Team
+ * @version 1.0
+ * @since 2024
+ */
 class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
     companion object {
+        // 로그 태그
         private const val TAG = "KeyboardAccessibility"
+        
+        // 브로드캐스트 액션 상수들
         const val ACTION_KEYBOARD_SHOWN = "com.mv.floatingbuttonapp.KEYBOARD_SHOWN"
         const val ACTION_KEYBOARD_HIDDEN = "com.mv.floatingbuttonapp.KEYBOARD_HIDDEN"
         const val ACTION_TAKE_SCREENSHOT = "com.mv.floatingbuttonapp.TAKE_SCREENSHOT"
+        
+        // 브로드캐스트 엑스트라 키 상수들
         const val EXTRA_KEYBOARD_HEIGHT = "keyboard_height"
         const val EXTRA_SCREENSHOT_BITMAP = "screenshot_bitmap"
 
+        /**
+         * 서비스 인스턴스 (싱글톤 패턴)
+         * 다른 클래스에서 접근 가능하도록 전역 변수로 관리
+         */
         @Volatile
         var instance: KeyboardDetectionAccessibilityService? = null
 
-        // 키보드 상태를 전역적으로 확인할 수 있는 변수
+        /**
+         * 키보드 표시 상태를 전역적으로 확인할 수 있는 변수
+         * FloatingButtonService에서 참조하여 플로팅 버튼 표시 결정
+         */
         @Volatile
         var isKeyboardVisible = false
 
+        /**
+         * 현재 키보드 높이 (픽셀 단위)
+         * 플로팅 버튼 위치 조정에 사용
+         */
         @Volatile
         var keyboardHeight = 0
     }

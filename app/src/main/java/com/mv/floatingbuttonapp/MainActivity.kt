@@ -48,19 +48,68 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
+/**
+ * 플로팅 버튼 앱의 메인 액티비티
+ * 
+ * 이 액티비티는 앱의 진입점이며 다음과 같은 주요 기능을 제공합니다:
+ * - 사용자 로그인/로그아웃 관리 (카카오, 구글)
+ * - 필수 권한 확인 및 요청 (오버레이, 접근성, 화면 캡처)
+ * - 플로팅 버튼 서비스 시작/중지
+ * - 로그인 상태에 따른 UI 전환
+ * - 권한 설정 가이드 제공
+ * 
+ * @author FloatingButtonApp Team
+ * @version 1.0
+ * @since 2024
+ */
 class MainActivity : ComponentActivity() {
 
-    // 로그인 상태 관리
+    // ==================== 로그인 상태 관리 ====================
+    
+    /**
+     * 현재 로그인 상태를 나타내는 변수
+     * true: 로그인됨, false: 로그인되지 않음
+     */
     private var isLoggedIn by mutableStateOf(false)
+    
+    /**
+     * 현재 로그인된 사용자 정보
+     * 로그인되지 않은 경우 null
+     */
     private var currentUser by mutableStateOf<UserInfo?>(null)
 
-    // 로그인 매니저들
+    // ==================== 로그인 매니저들 ====================
+    
+    /**
+     * 카카오 로그인을 관리하는 매니저
+     * 카카오 SDK를 사용한 로그인 처리
+     */
     private lateinit var kakaoLoginManager: KakaoLoginManager
+    
+    /**
+     * 구글 로그인을 관리하는 매니저
+     * Firebase Auth와 Google Sign-In을 사용한 로그인 처리
+     */
     private lateinit var googleLoginManager: GoogleLoginManager
     
-    // 권한 상태 관리
+    // ==================== 권한 상태 관리 ====================
+    
+    /**
+     * 다른 앱 위에 그리기 권한 상태
+     * 플로팅 버튼 표시에 필요
+     */
     private var hasOverlayPermission by mutableStateOf(false)
+    
+    /**
+     * 접근성 서비스 권한 상태
+     * 키보드 감지 및 화면 캡처에 필요
+     */
     private var hasAccessibilityPermission by mutableStateOf(false)
+    
+    /**
+     * 화면 캡처 권한 상태
+     * MediaProjection API 사용에 필요 (현재는 사용하지 않음)
+     */
     private var hasMediaProjectionPermission by mutableStateOf(false)
     
     // 구글 로그인 결과 처리
