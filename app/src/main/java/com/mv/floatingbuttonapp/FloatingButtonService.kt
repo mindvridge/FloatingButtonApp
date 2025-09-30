@@ -229,7 +229,13 @@ class FloatingButtonService :
      * 플로팅 버튼의 마지막 Y 좌표
      * 드래그로 이동한 위치를 기억하기 위해 사용
      */
-    private var lastButtonYPosition = 300
+    private var lastButtonYPosition = 0
+    
+    /**
+     * 사용자가 드래그로 위치를 변경했는지 여부
+     * true: 사용자가 드래그로 이동함, false: 기본 위치 사용 중
+     */
+    private var isUserMovedPosition = false
     
     /**
      * 화면 높이 (픽셀 단위)
@@ -492,6 +498,9 @@ class FloatingButtonService :
                     onDrag = { dragAmountX, dragAmountY ->
                         this@FloatingButtonService.updateButtonPositionByDrag(dragAmountX, dragAmountY)
                     },
+                    onDragEnd = {
+                        this@FloatingButtonService.finalizeButtonPosition()
+                    },
                     onButtonClick = {
                         // 플로팅 버튼 클릭 시 화면 캡처 및 OCR 수행
                         this@FloatingButtonService.handleButtonClick()
@@ -604,11 +613,11 @@ class FloatingButtonService :
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             
-            // 저장된 위치가 있으면 사용, 없으면 기본 위치 설정
-            if (lastButtonXPosition > 0 && lastButtonYPosition > 0) {
+            // 사용자가 드래그로 이동한 위치가 있으면 사용, 없으면 기본 위치 설정
+            if (isUserMovedPosition && lastButtonXPosition > 0 && lastButtonYPosition > 0) {
                 x = lastButtonXPosition
                 y = lastButtonYPosition
-                Log.d(TAG, "저장된 위치 사용: x=$lastButtonXPosition, y=$lastButtonYPosition")
+                Log.d(TAG, "사용자가 이동한 위치 사용: x=$lastButtonXPosition, y=$lastButtonYPosition")
             } else {
                 // 초기 위치를 화면 하단으로 설정 (메시지 입력바 위쪽 고려)
                 val messageInputBarHeight = 120 // 메시지 입력바 예상 높이 (dp)
@@ -636,32 +645,33 @@ class FloatingButtonService :
             createFloatingView()
         }
         
-        // 키보드 높이와 메시지 입력바 높이에 맞춰 위치 조정
+        // 사용자가 드래그로 이동한 위치가 아닌 경우에만 키보드 높이에 맞춰 위치 조정
         floatingView?.let {
-            val buttonHeight = 44 // 플로팅 버튼 높이 (dp)
-            val margin = 20 // 여백 (dp)
-            
-            // dp를 픽셀로 변환
-            val density = resources.displayMetrics.density
-            val buttonHeightPx = (buttonHeight * density).toInt()
-            val marginPx = (margin * density).toInt()
-            
-            // 입력바 높이가 0이면 기본값 사용
-            val actualInputBarHeight = if (messageInputBarHeight > 0) {
-                messageInputBarHeight
+            if (!isUserMovedPosition) {
+                val buttonHeight = 44 // 플로팅 버튼 높이 (dp)
+                val margin = 20 // 여백 (dp)
+                
+                // dp를 픽셀로 변환
+                val density = resources.displayMetrics.density
+                val buttonHeightPx = (buttonHeight * density).toInt()
+                val marginPx = (margin * density).toInt()
+                
+                // 입력바 높이가 0이면 기본값 사용
+                val actualInputBarHeight = if (messageInputBarHeight > 0) {
+                    messageInputBarHeight
+                } else {
+                    (120 * density).toInt() // 기본 입력바 높이
+                }
+                
+                // 키보드에 맞춰 Y 위치 조정
+                val newY = screenHeight - keyboardHeight - actualInputBarHeight - buttonHeightPx - marginPx
+                layoutParams.y = newY
+                windowManager.updateViewLayout(it, layoutParams)
+                
+                Log.d(TAG, "키보드에 맞춰 위치 조정: x = ${layoutParams.x}, y = ${layoutParams.y}, 키보드높이 = $keyboardHeight, 입력바높이 = $actualInputBarHeight")
             } else {
-                (120 * density).toInt() // 기본 입력바 높이
+                Log.d(TAG, "사용자가 이동한 위치 유지: x = ${layoutParams.x}, y = ${layoutParams.y}")
             }
-            
-            // X 위치는 저장된 위치 유지, Y 위치만 키보드에 맞춰 조정
-            val newY = screenHeight - keyboardHeight - actualInputBarHeight - buttonHeightPx - marginPx
-            layoutParams.y = newY
-            windowManager.updateViewLayout(it, layoutParams)
-            
-            // 새로운 Y 위치 저장
-            lastButtonYPosition = newY
-            
-            Log.d(TAG, "플로팅 버튼 위치 조정: x = ${layoutParams.x}, y = ${layoutParams.y}, 키보드높이 = $keyboardHeight, 입력바높이 = $actualInputBarHeight")
         }
     }
 
@@ -696,12 +706,74 @@ class FloatingButtonService :
         layoutParams.x += dragAmountX.roundToInt()
         layoutParams.y += dragAmountY.roundToInt()
         
-        // 드래그 중 위치를 실시간으로 저장
+        // 화면 경계 체크 및 조정
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+        val buttonSize = (44 * resources.displayMetrics.density).toInt() // 44dp를 픽셀로 변환
+        
+        // X 좌표 경계 체크
+        layoutParams.x = layoutParams.x.coerceIn(0, screenWidth - buttonSize)
+        
+        // Y 좌표 경계 체크 (상태바와 네비게이션 바 고려)
+        val statusBarHeight = getStatusBarHeight()
+        val navigationBarHeight = getNavigationBarHeight()
+        val minY = statusBarHeight
+        val maxY = screenHeight - navigationBarHeight - buttonSize
+        
+        layoutParams.y = layoutParams.y.coerceIn(minY, maxY)
+        
+        floatingView?.let { windowManager.updateViewLayout(it, layoutParams) }
+        Log.d(TAG, "드래그 위치 업데이트: x=${layoutParams.x}, y=${layoutParams.y}")
+    }
+    
+    /**
+     * 드래그 종료 시 최종 위치를 저장하고 고정
+     */
+    private fun finalizeButtonPosition() {
+        // 최종 위치 저장
         lastButtonXPosition = layoutParams.x
         lastButtonYPosition = layoutParams.y
         
-        floatingView?.let { windowManager.updateViewLayout(it, layoutParams) }
-        Log.d(TAG, "드래그 위치 업데이트: x=$lastButtonXPosition, y=$lastButtonYPosition")
+        // 사용자가 드래그로 위치를 변경했음을 표시
+        isUserMovedPosition = true
+        
+        Log.d(TAG, "플로팅 버튼 위치 고정: x=$lastButtonXPosition, y=$lastButtonYPosition, 사용자 이동: $isUserMovedPosition")
+    }
+    
+    /**
+     * 상태바 높이 가져오기
+     */
+    private fun getStatusBarHeight(): Int {
+        return try {
+            val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resourceId > 0) {
+                resources.getDimensionPixelSize(resourceId)
+            } else {
+                // 기본값 (대부분의 기기에서 24dp)
+                (24 * resources.displayMetrics.density).toInt()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "상태바 높이 가져오기 실패, 기본값 사용", e)
+            (24 * resources.displayMetrics.density).toInt()
+        }
+    }
+    
+    /**
+     * 네비게이션 바 높이 가져오기
+     */
+    private fun getNavigationBarHeight(): Int {
+        return try {
+            val resourceId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+            if (resourceId > 0) {
+                resources.getDimensionPixelSize(resourceId)
+            } else {
+                // 기본값 (대부분의 기기에서 48dp)
+                (48 * resources.displayMetrics.density).toInt()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "네비게이션 바 높이 가져오기 실패, 기본값 사용", e)
+            (48 * resources.displayMetrics.density).toInt()
+        }
     }
 
     private fun handleButtonClick() {
@@ -1722,11 +1794,16 @@ class FloatingButtonService :
 @Composable
 fun FloatingButtonContent(
     onDrag: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit,
     onButtonClick: () -> Unit
 ) {
     Box(
         modifier = Modifier.pointerInput(Unit) {
-            detectDragGestures { change, dragAmount ->
+            detectDragGestures(
+                onDragEnd = {
+                    onDragEnd()
+                }
+            ) { change, dragAmount ->
                 change.consume()
                 onDrag(dragAmount.x, dragAmount.y)
             }

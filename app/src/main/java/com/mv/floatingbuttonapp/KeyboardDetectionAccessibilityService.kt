@@ -2,10 +2,16 @@ package com.mv.floatingbuttonapp
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -40,6 +46,7 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         const val ACTION_KEYBOARD_SHOWN = "com.mv.floatingbuttonapp.KEYBOARD_SHOWN"
         const val ACTION_KEYBOARD_HIDDEN = "com.mv.floatingbuttonapp.KEYBOARD_HIDDEN"
         const val ACTION_TAKE_SCREENSHOT = "com.mv.floatingbuttonapp.TAKE_SCREENSHOT"
+        const val ACTION_INSERT_TEXT = "com.mv.floatingbuttonapp.INSERT_TEXT"
         
         // 브로드캐스트 엑스트라 키 상수들
         const val EXTRA_KEYBOARD_HEIGHT = "keyboard_height"
@@ -80,6 +87,21 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
             false
         }
 
+    // 텍스트 삽입 브로드캐스트 리시버
+    private val textInsertReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ACTION_INSERT_TEXT -> {
+                    val text = intent.getStringExtra("text")
+                    if (!text.isNullOrEmpty()) {
+                        Log.d(TAG, "텍스트 삽입 요청: $text")
+                        insertTextToInputField(text)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -87,6 +109,14 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
         // 화면 크기 가져오기
         screenHeight = resources.displayMetrics.heightPixels
+        
+        // 텍스트 삽입 브로드캐스트 리시버 등록
+        val filter = IntentFilter(ACTION_INSERT_TEXT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(textInsertReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(textInsertReceiver, filter)
+        }
     }
 
     override fun onServiceConnected() {
@@ -394,8 +424,100 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         Log.d(TAG, "화면 캡처 결과 브로드캐스트 전송 완료")
     }
 
+    /**
+     * 텍스트를 입력 필드에 삽입하고 키보드를 활성화
+     */
+    private fun insertTextToInputField(text: String) {
+        try {
+            // 현재 포커스된 입력 필드 찾기
+            val rootNode = rootInActiveWindow ?: return
+            val inputNode = findFocusedInputField(rootNode)
+            
+            if (inputNode != null) {
+                // 클립보드에 텍스트 복사
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("text", text)
+                clipboard.setPrimaryClip(clip)
+                
+                // 입력 필드에 포커스 설정
+                inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                
+                // 잠시 대기 후 텍스트 삽입
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    try {
+                        // 클립보드에서 붙여넣기
+                        val bundle = Bundle()
+                        bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+                        
+                        // 또는 클립보드 붙여넣기 시도
+                        inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                        
+                        Log.d(TAG, "텍스트 삽입 완료: $text")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "텍스트 삽입 실패", e)
+                    }
+                }, 100)
+                
+            } else {
+                Log.w(TAG, "입력 필드를 찾을 수 없습니다")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "텍스트 삽입 중 오류", e)
+        }
+    }
+    
+    /**
+     * 포커스된 입력 필드 찾기
+     */
+    private fun findFocusedInputField(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node == null) return null
+        
+        // 현재 노드가 입력 필드이고 포커스되어 있는지 확인
+        if (node.isFocused && isInputField(node)) {
+            return node
+        }
+        
+        // 자식 노드들에서 재귀적으로 검색
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                val result = findFocusedInputField(child)
+                if (result != null) {
+                    return result
+                }
+            }
+        }
+        
+        return null
+    }
+    
+    /**
+     * 노드가 입력 필드인지 확인
+     */
+    private fun isInputField(node: AccessibilityNodeInfo): Boolean {
+        val className = node.className?.toString() ?: return false
+        
+        val inputClassNames = listOf(
+            "android.widget.EditText",
+            "androidx.compose.ui.text.input.TextField",
+            "com.google.android.material.textfield.TextInputLayout",
+            "android.widget.AutoCompleteTextView",
+            "android.widget.MultiAutoCompleteTextView"
+        )
+        
+        return inputClassNames.any { inputClassName -> 
+            className.contains(inputClassName, ignoreCase = true) 
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(textInsertReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "textInsertReceiver 등록 해제 실패", e)
+        }
         instance = null
         Log.d(TAG, "AccessibilityService destroyed")
     }

@@ -361,6 +361,12 @@ class MainActivity : ComponentActivity() {
             Log.d("MainActivity", "서비스 시작 (AccessibilityService 화면 캡처 사용)")
             val intent = Intent(this, FloatingButtonService::class.java)
             startService(intent)
+            
+            // 서비스 시작 후 UI 상태 업데이트를 위해 약간의 지연 후 권한 상태 재확인
+            lifecycleScope.launch {
+                delay(500) // 서비스 시작 완료를 위한 짧은 지연
+                checkPermissions() // 권한 상태 재확인으로 UI 업데이트 트리거
+            }
         } catch (e: Exception) {
             Log.e("MainActivity", "서비스 시작 중 오류", e)
             Toast.makeText(this, "서비스 시작 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -422,6 +428,12 @@ class MainActivity : ComponentActivity() {
             stopService(intent)
             Log.d("MainActivity", "서비스 중지 요청됨")
             Toast.makeText(this, "서비스가 중지되었습니다", Toast.LENGTH_SHORT).show()
+            
+            // 서비스 중지 후 UI 상태 업데이트를 위해 약간의 지연 후 권한 상태 재확인
+            lifecycleScope.launch {
+                delay(500) // 서비스 중지 완료를 위한 짧은 지연
+                checkPermissions() // 권한 상태 재확인으로 UI 업데이트 트리거
+            }
         } catch (e: Exception) {
             Log.e("MainActivity", "서비스 중지 중 오류", e)
             Toast.makeText(this, "서비스 중지 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
