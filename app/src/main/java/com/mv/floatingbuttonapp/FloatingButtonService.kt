@@ -7,12 +7,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
-import android.media.ImageReader
-import android.media.projection.MediaProjection
-import android.media.projection.MediaProjectionManager
-import android.media.projection.MediaProjection.Callback
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -50,7 +44,6 @@ import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
-import java.nio.ByteBuffer
 import kotlin.math.roundToInt
 
 /**
@@ -720,7 +713,7 @@ class FloatingButtonService :
         Log.d(TAG, "채팅 분석: ${chatAnalysis?.sender}")
         
         // 추천 답변 생성 (채팅 분석 결과 반영)
-        val suggestions = generateSmartSuggestions(originalText, textType, entities, chatAnalysis)
+        val suggestions = generateSmartSuggestions(originalText, textType, chatAnalysis)
         Log.d(TAG, "생성된 추천: ${suggestions.size}개")
         
         // 신뢰도 계산
@@ -1231,27 +1224,27 @@ class FloatingButtonService :
     /**
      * 스마트 추천 답변 생성
      */
-    private fun generateSmartSuggestions(text: String, textType: TextType, entities: List<TextEntity>, chatAnalysis: ChatAnalysis?): List<String> {
+    private fun generateSmartSuggestions(text: String, textType: TextType, chatAnalysis: ChatAnalysis?): List<String> {
         val suggestions = mutableListOf<String>()
 
         when (textType) {
             TextType.QUESTION -> {
-                suggestions.addAll(generateQuestionSuggestions(text, entities, chatAnalysis))
+                suggestions.addAll(generateQuestionSuggestions(text, chatAnalysis))
             }
             TextType.MESSAGE -> {
-                suggestions.addAll(generateMessageSuggestions(text, entities, chatAnalysis))
+                suggestions.addAll(generateMessageSuggestions(text, chatAnalysis))
             }
             TextType.URL -> {
-                suggestions.addAll(generateUrlSuggestions(text, entities))
+                suggestions.addAll(generateUrlSuggestions())
             }
             TextType.PHONE_NUMBER -> {
-                suggestions.addAll(generatePhoneSuggestions(text, entities))
+                suggestions.addAll(generatePhoneSuggestions())
             }
             TextType.EMAIL -> {
-                suggestions.addAll(generateEmailSuggestions(text, entities))
+                suggestions.addAll(generateEmailSuggestions())
             }
             else -> {
-                suggestions.addAll(generateGeneralSuggestions(text, entities, chatAnalysis))
+                suggestions.addAll(generateGeneralSuggestions(chatAnalysis))
             }
         }
         
@@ -1261,7 +1254,7 @@ class FloatingButtonService :
     /**
      * 질문에 대한 추천 답변 생성
      */
-    private fun generateQuestionSuggestions(text: String, entities: List<TextEntity>, chatAnalysis: ChatAnalysis?): List<String> {
+    private fun generateQuestionSuggestions(text: String, chatAnalysis: ChatAnalysis?): List<String> {
         val suggestions = mutableListOf<String>()
         
         // 채팅 분석 결과에 따른 맞춤 답변
@@ -1306,7 +1299,7 @@ class FloatingButtonService :
     /**
      * 메시지에 대한 추천 답변 생성
      */
-    private fun generateMessageSuggestions(text: String, entities: List<TextEntity>, chatAnalysis: ChatAnalysis?): List<String> {
+    private fun generateMessageSuggestions(text: String, chatAnalysis: ChatAnalysis?): List<String> {
         val suggestions = mutableListOf<String>()
         
         // 발신자에 따른 맞춤 답변
@@ -1398,7 +1391,7 @@ class FloatingButtonService :
     /**
      * URL에 대한 추천 답변 생성
      */
-    private fun generateUrlSuggestions(text: String, entities: List<TextEntity>): List<String> {
+    private fun generateUrlSuggestions(): List<String> {
         return listOf(
             "이 링크를 확인해보시겠어요?",
             "관련 정보를 더 찾아보시겠어요?",
@@ -1411,7 +1404,7 @@ class FloatingButtonService :
     /**
      * 전화번호에 대한 추천 답변 생성
      */
-    private fun generatePhoneSuggestions(text: String, entities: List<TextEntity>): List<String> {
+    private fun generatePhoneSuggestions(): List<String> {
         return listOf(
             "이 번호로 연락드릴까요?",
             "전화번호를 저장하시겠어요?",
@@ -1424,7 +1417,7 @@ class FloatingButtonService :
     /**
      * 이메일에 대한 추천 답변 생성
      */
-    private fun generateEmailSuggestions(text: String, entities: List<TextEntity>): List<String> {
+    private fun generateEmailSuggestions(): List<String> {
         return listOf(
             "이 이메일로 연락드릴까요?",
             "이메일 주소를 저장하시겠어요?",
@@ -1437,7 +1430,7 @@ class FloatingButtonService :
     /**
      * 일반 텍스트에 대한 추천 답변 생성
      */
-    private fun generateGeneralSuggestions(text: String, entities: List<TextEntity>, chatAnalysis: ChatAnalysis?): List<String> {
+    private fun generateGeneralSuggestions(chatAnalysis: ChatAnalysis?): List<String> {
         val suggestions = mutableListOf<String>()
         
         // 기본 추천 답변

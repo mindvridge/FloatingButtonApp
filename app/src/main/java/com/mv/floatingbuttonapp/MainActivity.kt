@@ -2,14 +2,11 @@ package com.mv.floatingbuttonapp
 
 import android.app.Activity
 import android.app.ActivityManager
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.Context.RECEIVER_NOT_EXPORTED
-import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -106,11 +103,6 @@ class MainActivity : ComponentActivity() {
      */
     private var hasAccessibilityPermission by mutableStateOf(false)
     
-    /**
-     * 화면 캡처 권한 상태
-     * MediaProjection API 사용에 필요 (현재는 사용하지 않음)
-     */
-    private var hasMediaProjectionPermission by mutableStateOf(false)
     
     // 구글 로그인 결과 처리
     private val googleSignInLauncher = registerForActivityResult(
@@ -160,13 +152,6 @@ class MainActivity : ComponentActivity() {
         // 자동 로그인 확인
         checkAutoLogin()
         
-        // MediaProjection 권한 요청 리시버 등록
-        val filter = IntentFilter("com.mv.floatingbuttonapp.REQUEST_MEDIA_PROJECTION")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(mediaProjectionRequestReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(mediaProjectionRequestReceiver, filter)
-        }
 
         setContent {
             FloatingButtonAppTheme {
@@ -188,7 +173,8 @@ class MainActivity : ComponentActivity() {
                         onAccessibilityPermissionClick = { requestAccessibilityPermission() },
                         currentUser = currentUser,
                         hasOverlayPermission = hasOverlayPermission,
-                        hasAccessibilityPermission = hasAccessibilityPermission
+                        hasAccessibilityPermission = hasAccessibilityPermission,
+                        isServiceRunning = isServiceRunning()
                     )
                 } else {
                     // 로그인되지 않은 경우: 로그인 화면
@@ -202,12 +188,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        if (intent?.action == "REQUEST_MEDIA_PROJECTION") {
-            requestMediaProjection()
-        }
-    }
 
     override fun onResume() {
         super.onResume()
@@ -219,19 +199,31 @@ class MainActivity : ComponentActivity() {
      * 권한 상태 확인
      */
     private fun checkPermissions() {
+        val previousOverlayPermission = hasOverlayPermission
+        val previousAccessibilityPermission = hasAccessibilityPermission
+        
         hasOverlayPermission = checkOverlayPermission()
         hasAccessibilityPermission = checkAccessibilityPermission()
-        hasMediaProjectionPermission = checkMediaProjectionPermission()
-        Log.d("MainActivity", "권한 상태 확인 - 오버레이: $hasOverlayPermission, 접근성: $hasAccessibilityPermission, 화면캡처: $hasMediaProjectionPermission")
+        
+        Log.d("MainActivity", "권한 상태 확인 - 오버레이: $hasOverlayPermission, 접근성: $hasAccessibilityPermission")
+        
+        // 두 권한이 모두 허용되었고, 이전에 허용되지 않았던 경우 자동으로 서비스 시작
+        if (hasOverlayPermission && hasAccessibilityPermission) {
+            if (!previousOverlayPermission || !previousAccessibilityPermission) {
+                // 서비스가 이미 실행 중인지 확인
+                if (!isServiceRunning()) {
+                    Log.d("MainActivity", "모든 권한이 허용됨 - 서비스 자동 시작")
+                    startFloatingService()
+                    Toast.makeText(this, "모든 권한이 설정되었습니다. 서비스를 시작합니다.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Log.d("MainActivity", "서비스가 이미 실행 중입니다.")
+                }
+            }
+        }
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            unregisterReceiver(mediaProjectionRequestReceiver)
-        } catch (e: Exception) {
-            Log.e("MainActivity", "브로드캐스트 리시버 해제 중 오류", e)
-        }
     }
     
     /**
@@ -375,48 +367,6 @@ class MainActivity : ComponentActivity() {
         }
     }
     
-    private fun requestMediaProjection() {
-        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
-        startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
-    }
-    
-    // FloatingButtonService로부터 MediaProjection 권한 요청을 받는 리시버
-    private val mediaProjectionRequestReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.mv.floatingbuttonapp.REQUEST_MEDIA_PROJECTION") {
-                Log.d("MainActivity", "MediaProjection 권한 요청 브로드캐스트 수신됨")
-                requestMediaProjection()
-            }
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_MEDIA_PROJECTION) {
-            if (resultCode == Activity.RESULT_OK) {
-                // MediaProjection 권한이 승인됨 - 권한 상태 저장
-                val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
-                prefs.edit().putBoolean("has_media_projection_permission", true).apply()
-                
-                // 권한 상태 업데이트
-                hasMediaProjectionPermission = true
-                Log.d("MainActivity", "MediaProjection 권한 승인됨")
-                Toast.makeText(this, "화면 캡처 권한이 승인되었습니다.", Toast.LENGTH_SHORT).show()
-                
-                // FloatingButtonService에 결과 전달
-                val serviceIntent = Intent(this, FloatingButtonService::class.java)
-                serviceIntent.putExtra("resultCode", resultCode)
-                serviceIntent.putExtra("data", data)
-                startService(serviceIntent)
-                
-                Log.d("MainActivity", "서비스 시작됨")
-            } else {
-                Log.d("MainActivity", "MediaProjection 권한 거부됨")
-                Toast.makeText(this, "화면 캡처 권한이 거부되었습니다.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     private fun checkAllPermissionsAndStart(): Boolean {
         return checkOverlayPermission() && checkAccessibilityPermission()
@@ -447,32 +397,24 @@ class MainActivity : ComponentActivity() {
         return isEnabled
     }
     
-    private fun checkMediaProjectionPermission(): Boolean {
-        // MediaProjection 권한은 SharedPreferences에 저장된 결과로 확인
-        val prefs = getSharedPreferences("media_projection_prefs", Context.MODE_PRIVATE)
-        val hasPermission = prefs.getBoolean("has_media_projection_permission", false)
-        Log.d("MainActivity", "화면 캡처 권한 상태: $hasPermission")
-        return hasPermission
-    }
 
     private fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
             intent.data = Uri.parse("package:$packageName")
             startActivity(intent)
+            // 권한 설정 화면으로 이동 후 돌아올 때 자동으로 권한 상태 확인
+            Toast.makeText(this, "권한 설정 후 앱으로 돌아오면 자동으로 서비스가 시작됩니다.", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun requestAccessibilityPermission() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         startActivity(intent)
+        // 접근성 설정 화면으로 이동 후 돌아올 때 자동으로 권한 상태 확인
+        Toast.makeText(this, "접근성 서비스를 활성화한 후 앱으로 돌아오면 자동으로 서비스가 시작됩니다.", Toast.LENGTH_LONG).show()
     }
     
-    private fun requestMediaProjectionPermission() {
-        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
-        startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
-    }
 
     private fun stopFloatingService() {
         try {
@@ -485,10 +427,16 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "서비스 중지 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
-
-    companion object {
-        private const val REQUEST_MEDIA_PROJECTION = 1000
+    
+    /**
+     * 서비스 실행 상태 확인
+     */
+    private fun isServiceRunning(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val runningServices = activityManager.getRunningServices(Integer.MAX_VALUE)
+        return runningServices.any { it.service.className == FloatingButtonService::class.java.name }
     }
+
 }
 
 @Composable
@@ -500,40 +448,10 @@ fun MainScreen(
     onAccessibilityPermissionClick: () -> Unit,
     currentUser: UserInfo?,
     hasOverlayPermission: Boolean,
-    hasAccessibilityPermission: Boolean
+    hasAccessibilityPermission: Boolean,
+    isServiceRunning: Boolean
 ) {
-    var isServiceRunning by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    // 서비스 상태 확인 함수
-    fun checkServiceStatus() {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val runningServices = activityManager.getRunningServices(Integer.MAX_VALUE)
-        isServiceRunning = runningServices.any { it.service.className == FloatingButtonService::class.java.name }
-        Log.d("MainActivity", "서비스 상태 확인: $isServiceRunning")
-    }
     
-    LaunchedEffect(Unit) {
-        // 서비스 실행 상태 확인
-        checkServiceStatus()
-        
-        // 주기적으로 서비스 상태 확인 (5초마다)
-        while (true) {
-            delay(5000)
-            checkServiceStatus()
-        }
-    }
-    
-    // 서비스 상태 변경 감지를 위한 변수
-    var serviceActionTrigger by remember { mutableStateOf(0) }
-    
-    // 서비스 액션 트리거 시 상태 업데이트
-    LaunchedEffect(serviceActionTrigger) {
-        if (serviceActionTrigger > 0) {
-            delay(1000) // 1초 후 상태 확인
-            checkServiceStatus()
-        }
-    }
     
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -724,7 +642,6 @@ fun MainScreen(
                 Button(
                     onClick = {
                         onStopServiceClick()
-                        serviceActionTrigger++
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -742,7 +659,6 @@ fun MainScreen(
                 Button(
                     onClick = {
                         onStartServiceClick()
-                        serviceActionTrigger++
                     },
                     modifier = Modifier
                         .fillMaxWidth()
