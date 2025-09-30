@@ -214,6 +214,12 @@ class FloatingButtonService :
     private var isKeyboardVisible = false
     
     /**
+     * 플로팅 버튼 제거 애니메이션 진행 중 여부
+     * true: 애니메이션 진행 중, false: 애니메이션 완료
+     */
+    private var isRemovingAnimation = false
+    
+    /**
      * 플로팅 버튼의 마지막 X 좌표
      * 드래그로 이동한 위치를 기억하기 위해 사용
      */
@@ -270,8 +276,11 @@ class FloatingButtonService :
                     val keyboardHeight = intent.getIntExtra(
                         KeyboardDetectionAccessibilityService.EXTRA_KEYBOARD_HEIGHT, 0
                     )
-                    Log.d(TAG, "Keyboard shown broadcast received, height: $keyboardHeight")
-                    onKeyboardShown(keyboardHeight)
+                    val messageInputBarHeight = intent.getIntExtra(
+                        KeyboardDetectionAccessibilityService.EXTRA_MESSAGE_INPUT_BAR_HEIGHT, 0
+                    )
+                    Log.d(TAG, "Keyboard shown broadcast received, keyboard height: $keyboardHeight, input bar height: $messageInputBarHeight")
+                    onKeyboardShown(keyboardHeight, messageInputBarHeight)
                 }
                 KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_HIDDEN -> {
                     Log.d(TAG, "Keyboard hidden broadcast received")
@@ -494,22 +503,88 @@ class FloatingButtonService :
         floatingView = composeView
         try {
             windowManager.addView(floatingView, layoutParams)
+            // 생성 후 페이드 인 및 스케일 인 애니메이션 적용
+            addFloatingViewWithAnimation(floatingView!!)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding floating view", e)
         }
     }
 
     private fun removeFloatingView() {
-        floatingView?.let {
+        floatingView?.let { view ->
             try {
-                lastButtonXPosition = layoutParams.x
-                lastButtonYPosition = layoutParams.y
-                windowManager.removeView(it)
+                // 애니메이션과 함께 제거 (위치 저장은 removeFloatingViewWithAnimation에서 처리)
+                removeFloatingViewWithAnimation(view)
             } catch (e: Exception) {
                 Log.e(TAG, "Error removing floating view", e)
+                // 애니메이션 실패 시 즉시 제거
+                try {
+                    // 위치 저장
+                    lastButtonXPosition = layoutParams.x
+                    lastButtonYPosition = layoutParams.y
+                    windowManager.removeView(view)
+                    floatingView = null
+                    isRemovingAnimation = false
+                } catch (removeException: Exception) {
+                    Log.e(TAG, "Error removing view after animation failure", removeException)
+                    floatingView = null
+                    isRemovingAnimation = false
+                }
             }
         }
+    }
+    
+    /**
+     * 애니메이션과 함께 플로팅 뷰 추가
+     */
+    private fun addFloatingViewWithAnimation(view: View) {
+        // 초기 상태 설정 (투명하고 작게)
+        view.alpha = 0f
+        view.scaleX = 0.3f
+        view.scaleY = 0.3f
+        
+        // 페이드 인 및 스케일 인 애니메이션
+        view.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(300)
+            .setInterpolator(android.view.animation.OvershootInterpolator(0.5f))
+            .start()
+    }
+    
+    /**
+     * 애니메이션과 함께 플로팅 뷰 제거
+     */
+    private fun removeFloatingViewWithAnimation(view: View) {
+        // 현재 위치 저장
+        lastButtonXPosition = layoutParams.x
+        lastButtonYPosition = layoutParams.y
+        
+        // 애니메이션 시작 전에 상태 설정
+        isRemovingAnimation = true
         floatingView = null
+        
+        // 페이드 아웃 및 스케일 아웃 애니메이션
+        view.animate()
+            .alpha(0f)
+            .scaleX(0.3f)
+            .scaleY(0.3f)
+            .setDuration(200)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .withEndAction {
+                // 애니메이션 완료 후 뷰 제거
+                try {
+                    windowManager.removeView(view)
+                    Log.d(TAG, "플로팅 버튼 애니메이션 완료 후 제거됨")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing view after animation", e)
+                } finally {
+                    // 애니메이션 완료 상태로 설정
+                    isRemovingAnimation = false
+                }
+            }
+            .start()
     }
 
     private fun setupLayoutParams() {
@@ -528,26 +603,65 @@ class FloatingButtonService :
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = lastButtonXPosition
-            // 초기 위치를 화면 하단으로 설정
-            y = screenHeight - 200
+            
+            // 저장된 위치가 있으면 사용, 없으면 기본 위치 설정
+            if (lastButtonXPosition > 0 && lastButtonYPosition > 0) {
+                x = lastButtonXPosition
+                y = lastButtonYPosition
+                Log.d(TAG, "저장된 위치 사용: x=$lastButtonXPosition, y=$lastButtonYPosition")
+            } else {
+                // 초기 위치를 화면 하단으로 설정 (메시지 입력바 위쪽 고려)
+                val messageInputBarHeight = 120 // 메시지 입력바 예상 높이 (dp)
+                val buttonHeight = 44 // 플로팅 버튼 높이 (dp)
+                val margin = 20 // 여백 (dp)
+                
+                val density = resources.displayMetrics.density
+                val messageInputBarHeightPx = (messageInputBarHeight * density).toInt()
+                val buttonHeightPx = (buttonHeight * density).toInt()
+                val marginPx = (margin * density).toInt()
+                
+                x = screenWidth - 200 // 오른쪽에서 200px 떨어진 위치
+                y = screenHeight - messageInputBarHeightPx - buttonHeightPx - marginPx
+                Log.d(TAG, "기본 위치 설정: x=$x, y=$y")
+            }
         }
     }
 
-    private fun onKeyboardShown(keyboardHeight: Int) {
-        Log.d(TAG, "키보드 표시됨, 높이: $keyboardHeight")
+    private fun onKeyboardShown(keyboardHeight: Int, messageInputBarHeight: Int) {
+        Log.d(TAG, "키보드 표시됨, 키보드 높이: $keyboardHeight, 입력바 높이: $messageInputBarHeight")
         isKeyboardVisible = true
         
-        // 플로팅 버튼이 없으면 생성
-        if (floatingView == null) {
+        // 플로팅 버튼이 없고 애니메이션 중이 아닐 때만 생성
+        if (floatingView == null && !isRemovingAnimation) {
             createFloatingView()
         }
         
-        // 키보드 높이에 맞춰 위치 조정
+        // 키보드 높이와 메시지 입력바 높이에 맞춰 위치 조정
         floatingView?.let {
-            layoutParams.y = screenHeight - keyboardHeight - 200
+            val buttonHeight = 44 // 플로팅 버튼 높이 (dp)
+            val margin = 20 // 여백 (dp)
+            
+            // dp를 픽셀로 변환
+            val density = resources.displayMetrics.density
+            val buttonHeightPx = (buttonHeight * density).toInt()
+            val marginPx = (margin * density).toInt()
+            
+            // 입력바 높이가 0이면 기본값 사용
+            val actualInputBarHeight = if (messageInputBarHeight > 0) {
+                messageInputBarHeight
+            } else {
+                (120 * density).toInt() // 기본 입력바 높이
+            }
+            
+            // X 위치는 저장된 위치 유지, Y 위치만 키보드에 맞춰 조정
+            val newY = screenHeight - keyboardHeight - actualInputBarHeight - buttonHeightPx - marginPx
+            layoutParams.y = newY
             windowManager.updateViewLayout(it, layoutParams)
-            Log.d(TAG, "플로팅 버튼 위치 조정: y = ${layoutParams.y}")
+            
+            // 새로운 Y 위치 저장
+            lastButtonYPosition = newY
+            
+            Log.d(TAG, "플로팅 버튼 위치 조정: x = ${layoutParams.x}, y = ${layoutParams.y}, 키보드높이 = $keyboardHeight, 입력바높이 = $actualInputBarHeight")
         }
     }
 
@@ -569,7 +683,9 @@ class FloatingButtonService :
             if (isKeyboardCurrentlyVisible) {
                 // 키보드가 이미 활성화되어 있으면 플로팅 버튼 생성
                 val keyboardHeight = KeyboardDetectionAccessibilityService.keyboardHeight
-                onKeyboardShown(keyboardHeight)
+                // 초기 상태에서는 입력바 높이를 기본값으로 사용
+                val defaultInputBarHeight = (120 * resources.displayMetrics.density).toInt()
+                onKeyboardShown(keyboardHeight, defaultInputBarHeight)
             }
         } else {
             Log.d(TAG, "접근성 서비스가 아직 초기화되지 않음, 플로팅 버튼 생성 안함")
@@ -579,7 +695,13 @@ class FloatingButtonService :
     private fun updateButtonPositionByDrag(dragAmountX: Float, dragAmountY: Float) {
         layoutParams.x += dragAmountX.roundToInt()
         layoutParams.y += dragAmountY.roundToInt()
+        
+        // 드래그 중 위치를 실시간으로 저장
+        lastButtonXPosition = layoutParams.x
+        lastButtonYPosition = layoutParams.y
+        
         floatingView?.let { windowManager.updateViewLayout(it, layoutParams) }
+        Log.d(TAG, "드래그 위치 업데이트: x=$lastButtonXPosition, y=$lastButtonYPosition")
     }
 
     private fun handleButtonClick() {

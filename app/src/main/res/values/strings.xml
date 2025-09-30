@@ -9,4 +9,5 @@
     
     <!-- 구글 로그인을 위한 웹 클라이언트 ID (Firebase Console에서 가져와야 함) -->
     <string name="default_web_client_id">810626497201-kn593ev4rvjb4kvl7pf90aio178nq61e.apps.googleusercontent.com</string>
+    <string name="app_description">플로팅 버튼을 통해 대화의 대답을 추천해줍니다</string>
 </resources>

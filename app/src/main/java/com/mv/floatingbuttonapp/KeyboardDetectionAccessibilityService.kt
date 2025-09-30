@@ -43,6 +43,7 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         
         // 브로드캐스트 엑스트라 키 상수들
         const val EXTRA_KEYBOARD_HEIGHT = "keyboard_height"
+        const val EXTRA_MESSAGE_INPUT_BAR_HEIGHT = "message_input_bar_height"
         const val EXTRA_SCREENSHOT_BITMAP = "screenshot_bitmap"
 
         /**
@@ -201,14 +202,83 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
         return false
     }
+    
+    /**
+     * 메시지 입력바 높이 감지
+     * EditText나 입력 필드가 있는 영역의 높이를 계산
+     */
+    private fun detectMessageInputBarHeight(): Int {
+        val rootNode = rootInActiveWindow ?: return 0
+        
+        // EditText, TextInputLayout, 입력 관련 뷰들을 찾아서 높이 계산
+        val inputViews = mutableListOf<AccessibilityNodeInfo>()
+        findInputViews(rootNode, inputViews)
+        
+        if (inputViews.isEmpty()) {
+            // 입력 뷰가 없으면 기본 높이 반환
+            return (120 * resources.displayMetrics.density).toInt()
+        }
+        
+        // 가장 하단에 있는 입력 뷰의 높이 계산
+        var maxBottom = 0
+        var inputBarHeight = 0
+        
+        for (view in inputViews) {
+            val rect = Rect()
+            view.getBoundsInScreen(rect)
+            
+            if (rect.bottom > maxBottom) {
+                maxBottom = rect.bottom
+                inputBarHeight = rect.height()
+            }
+        }
+        
+        // 입력바 높이에 여백 추가
+        val margin = (20 * resources.displayMetrics.density).toInt()
+        return inputBarHeight + margin
+    }
+    
+    /**
+     * 입력 관련 뷰들을 재귀적으로 찾기
+     */
+    private fun findInputViews(node: AccessibilityNodeInfo, inputViews: MutableList<AccessibilityNodeInfo>) {
+        if (node == null) return
+        
+        // EditText, TextInputLayout, 입력 관련 클래스명들
+        val inputClassNames = listOf(
+            "android.widget.EditText",
+            "androidx.compose.ui.text.input.TextField",
+            "com.google.android.material.textfield.TextInputLayout",
+            "android.widget.AutoCompleteTextView",
+            "android.widget.MultiAutoCompleteTextView"
+        )
+        
+        val className = node.className?.toString()
+        if (className != null && inputClassNames.any { inputClassName -> 
+            className.contains(inputClassName, ignoreCase = true) 
+        }) {
+            inputViews.add(node)
+        }
+        
+        // 자식 노드들도 확인
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                findInputViews(child, inputViews)
+            }
+        }
+    }
 
     // 키보드 표시 상태를 브로드캐스트
     private fun broadcastKeyboardShown() {
+        val messageInputBarHeight = detectMessageInputBarHeight()
         val intent = Intent(ACTION_KEYBOARD_SHOWN).apply {
             putExtra(EXTRA_KEYBOARD_HEIGHT, keyboardHeight)
+            putExtra(EXTRA_MESSAGE_INPUT_BAR_HEIGHT, messageInputBarHeight)
             setPackage(packageName)  // 자체 앱에만 전송
         }
         sendBroadcast(intent)
+        Log.d(TAG, "키보드 표시 브로드캐스트: 키보드높이=$keyboardHeight, 입력바높이=$messageInputBarHeight")
     }
 
     // 키보드 숨김 상태를 브로드캐스트

@@ -34,6 +34,7 @@
 
     <application
         android:name=".FloatingButtonApplication"
+        android:description="@string/app_description"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -106,6 +107,7 @@
             android:name=".KeyboardDetectionAccessibilityService"
             android:exported="true"
             android:label="이렇게 보내면 어때 AI"
+            android:description="@string/app_description"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
