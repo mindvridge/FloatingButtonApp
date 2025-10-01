@@ -828,11 +828,11 @@ fun LoginScreen(
                 
                 // 카카오 로그인 버튼 (이미지 사용)
                 Image(
-                    painter = painterResource(id = R.drawable.kakao_login_medium_narrow),
+                    painter = painterResource(id = R.drawable.kakao_login_large_wide),
                     contentDescription = "카카오 로그인",
+                    contentScale = ContentScale.FillWidth, // 가로를 채우고 비율 유지
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
+                        .fillMaxWidth() // 화면 가로에 맞춤
                         .clip(RoundedCornerShape(8.dp)) // 이미지 모서리를 둥글게
                         .clickable(onClick = onKakaoLoginClick) // 클릭 이벤트 추가
                 )
