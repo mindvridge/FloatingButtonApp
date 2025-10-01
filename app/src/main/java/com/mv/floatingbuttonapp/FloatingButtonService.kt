@@ -306,6 +306,9 @@ class FloatingButtonService :
                         handler.postDelayed({
                             performOcrCapture()
                         }, 300) // 300ms 지연: 키보드 애니메이션이 완전히 끝나도록 대기
+                        
+                        // 키보드가 숨겨졌으므로 플로팅 버튼도 제거
+                        onKeyboardHidden()
                     } else {
                         // 일반적인 키보드 숨김 처리
                         onKeyboardHidden()
@@ -811,21 +814,32 @@ class FloatingButtonService :
         Log.d(TAG, "현재 키보드 상태: ${if (isKeyboardCurrentlyVisible) "표시됨" else "숨겨짐"}")
         
         if (isKeyboardCurrentlyVisible) {
-            // 키보드가 표시되어 있으면 먼저 숨김
-            Log.d(TAG, "키보드를 숨기고 OCR 실행 대기")
-            isWaitingForKeyboardHide = true
-            
-            // 키보드 숨김 실행
-            val hideSuccess = accessibilityService.hideKeyboard()
-            if (!hideSuccess) {
-                Log.e(TAG, "키보드 숨김 실패")
-                isWaitingForKeyboardHide = false
-                Toast.makeText(this, "키보드를 숨기는데 실패했습니다.", Toast.LENGTH_SHORT).show()
-                return
+            // 1. 먼저 입력창의 텍스트 지우기
+            Log.d(TAG, "입력창 텍스트 지우기 시작")
+            val clearSuccess = accessibilityService.clearInputField()
+            if (clearSuccess) {
+                Log.d(TAG, "입력창 텍스트 지우기 성공")
+            } else {
+                Log.w(TAG, "입력창 텍스트 지우기 실패 (계속 진행)")
             }
             
-            // 키보드가 숨겨지면 keyboardStateReceiver에서 OCR이 자동 실행됩니다
-            Log.d(TAG, "키보드 숨김 명령 전송 완료, 키보드 숨김 대기 중...")
+            // 2. 약간의 지연 후 키보드 숨김
+            handler.postDelayed({
+                Log.d(TAG, "키보드를 숨기고 OCR 실행 대기")
+                isWaitingForKeyboardHide = true
+                
+                // 키보드 숨김 실행
+                val hideSuccess = accessibilityService.hideKeyboard()
+                if (!hideSuccess) {
+                    Log.e(TAG, "키보드 숨김 실패")
+                    isWaitingForKeyboardHide = false
+                    Toast.makeText(this, "키보드를 숨기는데 실패했습니다.", Toast.LENGTH_SHORT).show()
+                    return@postDelayed
+                }
+                
+                // 키보드가 숨겨지면 keyboardStateReceiver에서 OCR이 자동 실행됩니다
+                Log.d(TAG, "키보드 숨김 명령 전송 완료, 키보드 숨김 대기 중...")
+            }, 150) // 150ms 딜레이: 텍스트 지우기가 완료될 시간
             
         } else {
             // 키보드가 이미 숨겨져 있으면 바로 OCR 실행

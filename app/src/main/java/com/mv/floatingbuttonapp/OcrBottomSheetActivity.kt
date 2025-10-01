@@ -187,8 +187,6 @@ fun OcrBottomSheetContent(
         }
     }
 
-    val clipboardManager = LocalClipboardManager.current
-
     // 키보드 상태 감지
     val isKeyboardOpen by rememberImeState()
 
@@ -301,24 +299,42 @@ fun OcrBottomSheetContent(
                                         .padding(bottom = 8.dp)
                                         .clickable {
                                             try {
-                                                // 클립보드에 복사
+                                                // 1. 클립보드에 복사
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                                 val clip = ClipData.newPlainText("text", response)
                                                 clipboard.setPrimaryClip(clip)
+                                                Log.d("TextInsert", "클립보드에 복사됨: $response")
                                                 
-                                                // 텍스트 입력 필드에 직접 입력
-                                                val intent = Intent("com.mv.floatingbuttonapp.INSERT_TEXT").apply {
-                                                    putExtra("text", response)
-                                                }
-                                                context.sendBroadcast(intent)
+                                                // 2. BottomSheet 먼저 닫기
+                                                onDismiss()
                                                 
-                                                Toast.makeText(
-                                                    context,
-                                                    "답변이 입력되었습니다.",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                                // 3. 약간의 딜레이 후 텍스트 삽입 브로드캐스트 전송
+                                                // 이렇게 하면 사용자가 키보드를 활성화할 시간을 갖게 됨
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                    try {
+                                                        // KeyboardDetectionAccessibilityService의 ACTION_INSERT_TEXT 사용
+                                                        val intent = Intent(KeyboardDetectionAccessibilityService.ACTION_INSERT_TEXT).apply {
+                                                            putExtra("text", response)
+                                                            setPackage(context.packageName)
+                                                        }
+                                                        context.sendBroadcast(intent)
+                                                        Log.d("TextInsert", "텍스트 삽입 브로드캐스트 전송: ${KeyboardDetectionAccessibilityService.ACTION_INSERT_TEXT}")
+                                                        
+                                                        Toast.makeText(
+                                                            context,
+                                                            "답변이 입력되었습니다.",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    } catch (e: Exception) {
+                                                        Log.e("TextInsert", "텍스트 삽입 실패: ${e.message}", e)
+                                                        Toast.makeText(
+                                                            context,
+                                                            "클립보드에 복사되었습니다. 직접 붙여넣기 해주세요.",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                }, 500) // 500ms 딜레이: 사용자가 키보드를 활성화할 시간
                                                 
-                                                onDismiss() // 하단 UI 닫기
                                             } catch (e: Exception) {
                                                 Log.e("TextInsert", "Failed to insert text: ${e.message}")
                                                 // 실패시 클립보드 복사만 수행

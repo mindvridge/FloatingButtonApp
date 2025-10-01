@@ -426,45 +426,117 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
     /**
      * 텍스트를 입력 필드에 삽입하고 키보드를 활성화
+     * 개선된 버전: 포커스된 입력 필드가 없으면 EditText를 찾아서 포커스를 맞춤
      */
     private fun insertTextToInputField(text: String) {
         try {
+            Log.d(TAG, "텍스트 삽입 시작: $text")
+            
             // 현재 포커스된 입력 필드 찾기
-            val rootNode = rootInActiveWindow ?: return
-            val inputNode = findFocusedInputField(rootNode)
+            val rootNode = rootInActiveWindow
+            if (rootNode == null) {
+                Log.e(TAG, "rootInActiveWindow가 null입니다")
+                return
+            }
+            
+            var inputNode = findFocusedInputField(rootNode)
+            
+            // 포커스된 입력 필드가 없으면 EditText를 찾아서 포커스 맞춤
+            if (inputNode == null) {
+                Log.d(TAG, "포커스된 입력 필드가 없음, EditText 검색 중...")
+                inputNode = findAnyInputField(rootNode)
+                
+                if (inputNode != null) {
+                    Log.d(TAG, "EditText 발견, 포커스 맞추는 중...")
+                    // 입력 필드에 포커스를 맞춰 키보드 활성화
+                    inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    inputNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    
+                    // 키보드가 열릴 시간을 줌
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        performTextInsertion(inputNode, text)
+                    }, 300) // 300ms 대기
+                    return
+                }
+            }
             
             if (inputNode != null) {
-                // 클립보드에 텍스트 복사
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("text", text)
-                clipboard.setPrimaryClip(clip)
-                
-                // 입력 필드에 포커스 설정
-                inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                
-                // 잠시 대기 후 텍스트 삽입
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    try {
-                        // 클립보드에서 붙여넣기
-                        val bundle = Bundle()
-                        bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-                        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-                        
-                        // 또는 클립보드 붙여넣기 시도
-                        inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                        
-                        Log.d(TAG, "텍스트 삽입 완료: $text")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "텍스트 삽입 실패", e)
-                    }
-                }, 100)
-                
+                Log.d(TAG, "입력 필드 발견, 텍스트 삽입 시작")
+                performTextInsertion(inputNode, text)
             } else {
                 Log.w(TAG, "입력 필드를 찾을 수 없습니다")
             }
         } catch (e: Exception) {
             Log.e(TAG, "텍스트 삽입 중 오류", e)
         }
+    }
+    
+    /**
+     * 실제 텍스트 삽입을 수행하는 함수
+     */
+    private fun performTextInsertion(inputNode: AccessibilityNodeInfo, text: String) {
+        try {
+            // 방법 1: ACTION_SET_TEXT 사용 (가장 직접적인 방법)
+            val bundle = Bundle()
+            bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            val setTextSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+            
+            if (setTextSuccess) {
+                Log.d(TAG, "ACTION_SET_TEXT로 텍스트 삽입 성공: $text")
+                return
+            }
+            
+            Log.d(TAG, "ACTION_SET_TEXT 실패, 클립보드 방식 시도")
+            
+            // 방법 2: 클립보드를 통한 붙여넣기
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("text", text)
+            clipboard.setPrimaryClip(clip)
+            Log.d(TAG, "클립보드에 복사됨")
+            
+            // 약간의 지연 후 붙여넣기
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val pasteSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                    if (pasteSuccess) {
+                        Log.d(TAG, "ACTION_PASTE로 텍스트 삽입 성공")
+                    } else {
+                        Log.w(TAG, "ACTION_PASTE 실패")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "붙여넣기 실패", e)
+                }
+            }, 100)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "텍스트 삽입 실패", e)
+        }
+    }
+    
+    /**
+     * 아무 입력 필드나 찾기 (포커스 여부 상관없음)
+     */
+    private fun findAnyInputField(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        
+        // 현재 노드가 입력 필드인지 확인
+        if (isInputField(node) && node.isEnabled && node.isVisibleToUser) {
+            Log.d(TAG, "입력 필드 발견: ${node.className}")
+            return node
+        }
+        
+        // 자식 노드들에서 재귀적으로 검색
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                val result = findAnyInputField(child)
+                if (result != null) {
+                    return result
+                }
+            }
+        }
+        
+        return null
     }
     
     /**
@@ -508,6 +580,92 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         
         return inputClassNames.any { inputClassName -> 
             className.contains(inputClassName, ignoreCase = true) 
+        }
+    }
+    
+    /**
+     * 입력 필드의 텍스트를 지우는 함수
+     */
+    fun clearInputField(): Boolean {
+        return try {
+            Log.d(TAG, "입력 필드 텍스트 지우기 시작")
+            
+            val rootNode = rootInActiveWindow
+            if (rootNode == null) {
+                Log.e(TAG, "rootInActiveWindow가 null입니다")
+                return false
+            }
+            
+            // 포커스된 입력 필드 찾기
+            var inputNode = findFocusedInputField(rootNode)
+            
+            // 포커스된 입력 필드가 없으면 아무 입력 필드나 찾기
+            if (inputNode == null) {
+                Log.d(TAG, "포커스된 입력 필드가 없음, EditText 검색 중...")
+                inputNode = findAnyInputField(rootNode)
+            }
+            
+            if (inputNode != null) {
+                Log.d(TAG, "입력 필드 발견, 텍스트 지우는 중...")
+                
+                // 방법 1: ACTION_SET_TEXT로 빈 문자열 설정
+                val bundle = Bundle()
+                bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+                val setTextSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+                
+                if (setTextSuccess) {
+                    Log.d(TAG, "ACTION_SET_TEXT로 텍스트 지우기 성공")
+                    return true
+                }
+                
+                // 방법 2: ACTION_SET_SELECTION으로 전체 선택 후 삭제
+                Log.d(TAG, "ACTION_SET_TEXT 실패, 전체 선택 후 삭제 시도")
+                
+                try {
+                    // 현재 텍스트 가져오기
+                    val currentText = inputNode.text
+                    if (currentText != null && currentText.isNotEmpty()) {
+                        // 전체 선택 (0부터 끝까지)
+                        val selectionBundle = Bundle()
+                        selectionBundle.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
+                        selectionBundle.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, currentText.length)
+                        val selectSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selectionBundle)
+                        
+                        if (selectSuccess) {
+                            Log.d(TAG, "전체 선택 성공")
+                            // 약간의 딜레이 후 잘라내기
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                try {
+                                    val cutSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_CUT)
+                                    if (cutSuccess) {
+                                        Log.d(TAG, "ACTION_CUT으로 텍스트 지우기 성공")
+                                    } else {
+                                        Log.w(TAG, "ACTION_CUT 실패")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "텍스트 삭제 실패", e)
+                                }
+                            }, 50)
+                            return true
+                        } else {
+                            Log.w(TAG, "전체 선택 실패")
+                        }
+                    } else {
+                        Log.d(TAG, "입력 필드가 이미 비어있음")
+                        return true
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "전체 선택 중 오류", e)
+                }
+                
+                return false
+            } else {
+                Log.w(TAG, "입력 필드를 찾을 수 없습니다")
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "입력 필드 텍스트 지우기 중 오류", e)
+            false
         }
     }
     
