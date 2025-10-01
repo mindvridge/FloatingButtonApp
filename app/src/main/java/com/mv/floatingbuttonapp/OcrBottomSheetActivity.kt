@@ -583,7 +583,7 @@ fun OcrBottomSheetContent(
                             )
                         }
                         
-                        // 다시 정리 버튼 추가
+                        // 다시 정리 버튼 (화면 가로 전체)
                         if (ocrText.isNotEmpty()) {
                             Button(
                                 onClick = {
@@ -595,11 +595,14 @@ fun OcrBottomSheetContent(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    .padding(top = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF4A90E2)
-                                )
+                                ),
+                                shape = RoundedCornerShape(24.dp)
                             ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "다시 정리",
                                     color = Color.White,
@@ -609,71 +612,46 @@ fun OcrBottomSheetContent(
                         }
 
 
-                       /* TextButton(
-                            onClick = {  옵션 선택  },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                        ) {
-                            Text(text = "옵션을 선택하세요", color = Color(0xFF4A90E2), fontSize = 14.sp)
-                        }*/
-
-                        Text(text = "옵션을 선택하세요", color = Color(0xFF4A90E2), fontSize = 14.sp)
-
-                        Row(
+                      
+                        // 답변 추천 버튼 (화면 가로 전체)
+                        Button(
+                            onClick = { 
+                                showResponseOptions = true
+                                isLoading = true
+                                scope.launch {
+                                    try {
+                                        val responses = generateResponses(
+                                            context = ocrText,
+                                            situation = selectedSituation,
+                                            mood = selectedMood,
+                                            length = selectedLength
+                                        )
+                                        generatedResponses = responses
+                                    } catch (e: Exception) {
+                                        Log.e("API_ERROR", "Failed to generate responses: ${e.message}", e)
+                                        generatedResponses = listOf("오류가 발생했습니다. 다시 시도해주세요.")
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            shape = RoundedCornerShape(24.dp),
+                            enabled = !isLoading
                         ) {
-                            OutlinedButton(
-                                onClick = onRetry,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(24.dp)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("다시 선택")
-                            }
-
-
-                            Button(
-                                onClick = { 
-                                    showResponseOptions = true
-                                    isLoading = true
-                                    scope.launch {
-                                        try {
-                                            val responses = generateResponses(
-                                                context = ocrText,
-                                                situation = selectedSituation,
-                                                mood = selectedMood,
-                                                length = selectedLength
-                                            )
-                                            generatedResponses = responses
-                                        } catch (e: Exception) {
-                                            Log.e("API_ERROR", "Failed to generate responses: ${e.message}", e)
-                                            generatedResponses = listOf("오류가 발생했습니다. 다시 시도해주세요.")
-                                        } finally {
-                                            isLoading = false
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(24.dp),
-                                enabled = !isLoading
-                            ) {
-                                if (isLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color.White
-                                    )
-                                } else {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                                }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (isLoading) "생성 중..." else "답변 추천")
                             }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isLoading) "생성 중..." else "답변 추천")
                         }
 
                     }

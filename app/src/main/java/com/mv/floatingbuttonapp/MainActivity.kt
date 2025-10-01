@@ -51,6 +51,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 /**
+ * 화면 상태를 나타내는 Enum
+ * 앱의 온보딩 플로우를 관리합니다
+ */
+enum class AppScreen {
+    LOGIN,                  // 로그인 화면
+    PERMISSION_OVERLAY,     // 권한 설정 1: 다른 앱 위에 그리기
+    PERMISSION_ACCESSIBILITY, // 권한 설정 2: 접근성 서비스
+    SERVICE_CONTROL         // 서비스 실행 화면
+}
+
+/**
  * 플로팅 버튼 앱의 메인 액티비티
  * 
  * 이 액티비티는 앱의 진입점이며 다음과 같은 주요 기능을 제공합니다:
@@ -67,6 +78,12 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
 
     // ==================== 로그인 상태 관리 ====================
+    
+    /**
+     * 현재 화면 상태
+     * 온보딩 플로우를 단계별로 관리합니다
+     */
+    private var currentScreen by mutableStateOf(AppScreen.LOGIN)
     
     /**
      * 현재 로그인 상태를 나타내는 변수
@@ -136,6 +153,8 @@ class MainActivity : ComponentActivity() {
                         profileImageUrl = loginData.profileImageUrl,
                         email = loginData.email
                     )
+                    // 로그인 성공 후 첫 번째 권한 화면으로 이동
+                    currentScreen = AppScreen.PERMISSION_OVERLAY
                     Toast.makeText(this@MainActivity, "구글 로그인 성공: ${loginData.nickname}", Toast.LENGTH_SHORT).show()
                     Log.d("MainActivity", "구글 로그인 성공: ${loginData.nickname}")
                 }.onFailure { error ->
@@ -180,34 +199,76 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             FloatingButtonAppTheme {
-                if (isLoggedIn) {
-                    // 로그인된 경우: 권한 관리 화면
-                    MainScreen(
-                        onStartServiceClick = {
-                            if (checkAllPermissionsAndStart()) {
-                                startFloatingService()
-                            } else {
-                                Toast.makeText(this@MainActivity, "필요한 권한을 먼저 설정해주세요.", Toast.LENGTH_SHORT).show()
+                // 현재 화면 상태에 따라 다른 화면 표시
+                when (currentScreen) {
+                    AppScreen.LOGIN -> {
+                        // 로그인 화면
+                        LoginScreen(
+                            onKakaoLoginClick = { loginWithKakao() },
+                            onGoogleLoginClick = { loginWithGoogle() },
+                            onTestLoginClick = { loginWithTest() }
+                        )
+                    }
+                    
+                    AppScreen.PERMISSION_OVERLAY -> {
+                        // 권한 설정 1: 다른 앱 위에 그리기
+                        PermissionOverlayScreen(
+                            currentUser = currentUser,
+                            hasPermission = hasOverlayPermission,
+                            onRequestPermission = { requestOverlayPermission() },
+                            onNextClick = {
+                                // 다음 권한 화면으로 이동
+                                currentScreen = AppScreen.PERMISSION_ACCESSIBILITY
+                            },
+                            onSkipClick = {
+                                // 건너뛰고 다음 권한 화면으로 이동
+                                currentScreen = AppScreen.PERMISSION_ACCESSIBILITY
                             }
-                        },
-                        onStopServiceClick = {
-                            stopFloatingService()
-                        },
-                        onLogoutClick = { logoutFromKakao() },
-                        onOverlayPermissionClick = { requestOverlayPermission() },
-                        onAccessibilityPermissionClick = { requestAccessibilityPermission() },
-                        currentUser = currentUser,
-                        hasOverlayPermission = hasOverlayPermission,
-                        hasAccessibilityPermission = hasAccessibilityPermission,
-                        isServiceRunning = isServiceRunningState
-                    )
-                } else {
-                    // 로그인되지 않은 경우: 로그인 화면
-                    LoginScreen(
-                        onKakaoLoginClick = { loginWithKakao() },
-                        onGoogleLoginClick = { loginWithGoogle() },
-                        onTestLoginClick = { loginWithTest() }
-                    )
+                        )
+                    }
+                    
+                    AppScreen.PERMISSION_ACCESSIBILITY -> {
+                        // 권한 설정 2: 접근성 서비스
+                        PermissionAccessibilityScreen(
+                            currentUser = currentUser,
+                            hasPermission = hasAccessibilityPermission,
+                            onRequestPermission = { requestAccessibilityPermission() },
+                            onNextClick = {
+                                // 서비스 실행 화면으로 이동
+                                currentScreen = AppScreen.SERVICE_CONTROL
+                            },
+                            onSkipClick = {
+                                // 건너뛰고 서비스 실행 화면으로 이동
+                                currentScreen = AppScreen.SERVICE_CONTROL
+                            }
+                        )
+                    }
+                    
+                    AppScreen.SERVICE_CONTROL -> {
+                        // 서비스 실행 화면
+                        ServiceControlScreen(
+                            currentUser = currentUser,
+                            hasOverlayPermission = hasOverlayPermission,
+                            hasAccessibilityPermission = hasAccessibilityPermission,
+                            isServiceRunning = isServiceRunningState,
+                            onStartServiceClick = {
+                                if (checkAllPermissionsAndStart()) {
+                                    startFloatingService()
+                                } else {
+                                    Toast.makeText(this@MainActivity, "필요한 권한을 먼저 설정해주세요.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onStopServiceClick = {
+                                stopFloatingService()
+                            },
+                            onLogoutClick = { 
+                                logoutFromKakao()
+                                currentScreen = AppScreen.LOGIN
+                            },
+                            onOverlayPermissionClick = { requestOverlayPermission() },
+                            onAccessibilityPermissionClick = { requestAccessibilityPermission() }
+                        )
+                    }
                 }
             }
         }
@@ -248,6 +309,18 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * 권한 상태에 따라 초기 화면 결정
+     * 자동 로그인 시 사용됩니다
+     */
+    private fun determineInitialScreen(): AppScreen {
+        return when {
+            !hasOverlayPermission -> AppScreen.PERMISSION_OVERLAY
+            !hasAccessibilityPermission -> AppScreen.PERMISSION_ACCESSIBILITY
+            else -> AppScreen.SERVICE_CONTROL
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
     }
@@ -262,6 +335,8 @@ class MainActivity : ComponentActivity() {
                 val kakaoResult = kakaoLoginManager.checkAutoLogin()
                 kakaoResult.onSuccess { loginResult ->
                     isLoggedIn = true
+                    // 자동 로그인 시 권한 상태에 따라 화면 결정
+                    currentScreen = determineInitialScreen()
                     currentUser = UserInfo(
                         userId = loginResult.userId,
                         nickname = loginResult.nickname,
@@ -304,6 +379,8 @@ class MainActivity : ComponentActivity() {
                         profileImageUrl = loginResult.profileImageUrl,
                         email = loginResult.email
                     )
+                    // 로그인 성공 후 첫 번째 권한 화면으로 이동
+                    currentScreen = AppScreen.PERMISSION_OVERLAY
                     Toast.makeText(this@MainActivity, "카카오 로그인 성공: ${loginResult.nickname}", Toast.LENGTH_SHORT).show()
                     Log.d("MainActivity", "카카오 로그인 성공: ${loginResult.nickname}")
                 }.onFailure { error ->
@@ -349,6 +426,8 @@ class MainActivity : ComponentActivity() {
                 profileImageUrl = null,
                 email = "test@example.com"
             )
+            // 로그인 성공 후 첫 번째 권한 화면으로 이동
+            currentScreen = AppScreen.PERMISSION_OVERLAY
             Toast.makeText(this, "테스트 로그인 성공: ${currentUser?.nickname}", Toast.LENGTH_SHORT).show()
             Log.d("MainActivity", "테스트 로그인 성공: ${currentUser?.nickname}")
         } catch (e: Exception) {
