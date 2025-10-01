@@ -510,6 +510,47 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
             className.contains(inputClassName, ignoreCase = true) 
         }
     }
+    
+    /**
+     * 키보드를 숨기는 함수
+     * EditText에서 포커스를 해제하고 Back 버튼을 눌러 키보드를 숨깁니다
+     */
+    fun hideKeyboard(): Boolean {
+        return try {
+            Log.d(TAG, "키보드 숨김 시작")
+            
+            // 방법 1: 포커스된 입력 필드에서 포커스 해제
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                val focusedNode = findFocusedInputField(rootNode)
+                if (focusedNode != null) {
+                    Log.d(TAG, "포커스된 입력 필드 발견, 포커스 해제 시도")
+                    focusedNode.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS)
+                }
+            }
+            
+            // 방법 2: Back 버튼을 눌러 키보드 숨김
+            // 약간의 지연을 두고 실행하여 포커스 해제가 먼저 처리되도록 함
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val backSuccess = performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                    if (backSuccess) {
+                        Log.d(TAG, "Back 액션을 통해 키보드 숨김 완료")
+                    } else {
+                        Log.w(TAG, "Back 액션 실행 실패")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Back 액션 중 오류", e)
+                }
+            }, 100)
+            
+            Log.d(TAG, "키보드 숨김 명령 전송 완료")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "키보드 숨김 중 오류", e)
+            false
+        }
+    }
 
     override fun onDestroy() {
         super.onDestroy()

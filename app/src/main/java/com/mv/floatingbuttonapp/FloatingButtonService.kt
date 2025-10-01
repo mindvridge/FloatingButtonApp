@@ -264,6 +264,12 @@ class FloatingButtonService :
      * UI 업데이트 및 비동기 작업 처리를 위해 사용
      */
     private val handler = Handler(Looper.getMainLooper())
+    
+    /**
+     * OCR 실행을 위해 키보드가 숨겨지기를 기다리는지 여부
+     * true: 키보드가 숨겨지면 OCR 실행, false: 일반적인 키보드 숨김
+     */
+    private var isWaitingForKeyboardHide = false
 
     private val _viewModelStore: ViewModelStore = ViewModelStore()
     private val savedStateRegistryController: SavedStateRegistryController =
@@ -290,7 +296,20 @@ class FloatingButtonService :
                 }
                 KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_HIDDEN -> {
                     Log.d(TAG, "Keyboard hidden broadcast received")
-                    onKeyboardHidden()
+                    
+                    // OCR을 위해 키보드 숨김을 기다리고 있었다면 OCR 실행
+                    if (isWaitingForKeyboardHide) {
+                        Log.d(TAG, "키보드 숨김 확인됨, OCR 실행 시작")
+                        isWaitingForKeyboardHide = false
+                        
+                        // 키보드가 완전히 숨겨진 후 약간의 지연을 두고 화면 캡처 실행
+                        handler.postDelayed({
+                            performOcrCapture()
+                        }, 300) // 300ms 지연: 키보드 애니메이션이 완전히 끝나도록 대기
+                    } else {
+                        // 일반적인 키보드 숨김 처리
+                        onKeyboardHidden()
+                    }
                 }
             }
         }
@@ -779,6 +798,49 @@ class FloatingButtonService :
     private fun handleButtonClick() {
         Log.d(TAG, "handleButtonClick() started")
 
+        // AccessibilityService 확인
+        val accessibilityService = KeyboardDetectionAccessibilityService.instance
+        if (accessibilityService == null) {
+            Log.e(TAG, "AccessibilityService가 활성화되지 않음")
+            Toast.makeText(this, "접근성 서비스를 활성화해주세요", Toast.LENGTH_LONG).show()
+            return
+        }
+        
+        // 키보드가 표시되어 있는지 확인
+        val isKeyboardCurrentlyVisible = KeyboardDetectionAccessibilityService.isKeyboardVisible
+        Log.d(TAG, "현재 키보드 상태: ${if (isKeyboardCurrentlyVisible) "표시됨" else "숨겨짐"}")
+        
+        if (isKeyboardCurrentlyVisible) {
+            // 키보드가 표시되어 있으면 먼저 숨김
+            Log.d(TAG, "키보드를 숨기고 OCR 실행 대기")
+            isWaitingForKeyboardHide = true
+            
+            // 키보드 숨김 실행
+            val hideSuccess = accessibilityService.hideKeyboard()
+            if (!hideSuccess) {
+                Log.e(TAG, "키보드 숨김 실패")
+                isWaitingForKeyboardHide = false
+                Toast.makeText(this, "키보드를 숨기는데 실패했습니다.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // 키보드가 숨겨지면 keyboardStateReceiver에서 OCR이 자동 실행됩니다
+            Log.d(TAG, "키보드 숨김 명령 전송 완료, 키보드 숨김 대기 중...")
+            
+        } else {
+            // 키보드가 이미 숨겨져 있으면 바로 OCR 실행
+            Log.d(TAG, "키보드가 이미 숨겨져 있음, OCR 즉시 실행")
+            performOcrCapture()
+        }
+    }
+    
+    /**
+     * OCR을 위한 화면 캡처 및 텍스트 인식 실행
+     * 키보드가 완전히 숨겨진 후 호출됩니다
+     */
+    private fun performOcrCapture() {
+        Log.d(TAG, "performOcrCapture() 시작")
+        
         // AccessibilityService를 통한 화면 캡처 사용
         val accessibilityService = KeyboardDetectionAccessibilityService.instance
         if (accessibilityService != null) {
@@ -793,7 +855,7 @@ class FloatingButtonService :
                 if (screenshot != null) {
                     Log.d(TAG, "화면 캡처 성공: ${screenshot.width}x${screenshot.height}")
                     processScreenshot(screenshot)
-        } else {
+                } else {
                     Log.e(TAG, "화면 캡처 실패: null 반환")
                     showPermissionRequestToast("화면 캡처에 실패했습니다. 접근성 서비스 설정을 확인해주세요.")
                 }
