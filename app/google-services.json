@@ -12,7 +12,16 @@
           "package_name": "com.Mindvridge"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "810626497201-kn593ev4rvjb4kvl7pf90aio178nq61e.apps.googleusercontent.com",
+          "client_type": 1
+        },
+        {
+          "client_id": "810626497201-kn593ev4rvjb4kvl7pf90aio178nq61e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAmyA_w-99JmuLe-2nCOacN1fpXo0iM_-4"
@@ -31,7 +40,16 @@
           "package_name": "com.mv.floatingbuttonapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "810626497201-kn593ev4rvjb4kvl7pf90aio178nq61e.apps.googleusercontent.com",
+          "client_type": 1
+        },
+        {
+          "client_id": "810626497201-kn593ev4rvjb4kvl7pf90aio178nq61e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAmyA_w-99JmuLe-2nCOacN1fpXo0iM_-4"

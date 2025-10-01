@@ -16,10 +16,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -108,31 +111,43 @@ class MainActivity : ComponentActivity() {
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            lifecycleScope.launch {
-                try {
-                    val loginResult = googleLoginManager.handleSignInResult(result.data)
-                    loginResult.onSuccess { loginData ->
-                        isLoggedIn = true
-                        currentUser = UserInfo(
-                            userId = loginData.userId,
-                            nickname = loginData.nickname,
-                            profileImageUrl = loginData.profileImageUrl,
-                            email = loginData.email
-                        )
-                        Toast.makeText(this@MainActivity, "구글 로그인 성공: ${loginData.nickname}", Toast.LENGTH_SHORT).show()
-                        Log.d("MainActivity", "구글 로그인 성공: ${loginData.nickname}")
-                    }.onFailure { error ->
-                        Toast.makeText(this@MainActivity, "구글 로그인 실패: ${error.message}", Toast.LENGTH_SHORT).show()
-                        Log.e("MainActivity", "구글 로그인 실패", error)
+        Log.d("MainActivity", "구글 로그인 결과 코드: ${result.resultCode}")
+        Log.d("MainActivity", "구글 로그인 결과 데이터: ${result.data}")
+        Log.d("MainActivity", "구글 로그인 결과 데이터 extras: ${result.data?.extras}")
+        
+        // RESULT_CANCELED인 경우에도 실제 오류를 확인해보기 위해 처리 시도
+        lifecycleScope.launch {
+            try {
+                Log.d("MainActivity", "구글 로그인 결과 처리 시작 (결과 코드: ${result.resultCode})")
+                val loginResult = googleLoginManager.handleSignInResult(result.data)
+                loginResult.onSuccess { loginData ->
+                    isLoggedIn = true
+                    currentUser = UserInfo(
+                        userId = loginData.userId,
+                        nickname = loginData.nickname,
+                        profileImageUrl = loginData.profileImageUrl,
+                        email = loginData.email
+                    )
+                    Toast.makeText(this@MainActivity, "구글 로그인 성공: ${loginData.nickname}", Toast.LENGTH_SHORT).show()
+                    Log.d("MainActivity", "구글 로그인 성공: ${loginData.nickname}")
+                }.onFailure { error ->
+                    Log.e("MainActivity", "구글 로그인 실패", error)
+                    when (result.resultCode) {
+                        Activity.RESULT_OK -> {
+                            Toast.makeText(this@MainActivity, "구글 로그인 실패: ${error.message}", Toast.LENGTH_LONG).show()
+                        }
+                        Activity.RESULT_CANCELED -> {
+                            Toast.makeText(this@MainActivity, "구글 로그인이 취소되었습니다: ${error.message}", Toast.LENGTH_LONG).show()
+                        }
+                        else -> {
+                            Toast.makeText(this@MainActivity, "구글 로그인 오류 (코드: ${result.resultCode}): ${error.message}", Toast.LENGTH_LONG).show()
+                        }
                     }
-                } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "구글 로그인 오류: ${e.message}", Toast.LENGTH_SHORT).show()
-                    Log.e("MainActivity", "구글 로그인 오류", e)
                 }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "구글 로그인 처리 중 예외 발생", e)
+                Toast.makeText(this@MainActivity, "구글 로그인 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
             }
-        } else {
-            Log.d("MainActivity", "구글 로그인 취소됨")
         }
     }
 
@@ -296,10 +311,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun loginWithGoogle() {
         try {
+            Log.d("MainActivity", "구글 로그인 시작")
             val signInIntent = googleLoginManager.getSignInIntent()
+            Log.d("MainActivity", "구글 로그인 Intent: $signInIntent")
+            Log.d("MainActivity", "구글 로그인 Intent extras: ${signInIntent.extras}")
+            Log.d("MainActivity", "구글 로그인 Intent action: ${signInIntent.action}")
+            Log.d("MainActivity", "구글 로그인 Intent component: ${signInIntent.component}")
+            Log.d("MainActivity", "구글 로그인 Intent package: ${signInIntent.`package`}")
             googleSignInLauncher.launch(signInIntent)
         } catch (e: Exception) {
-            Toast.makeText(this, "구글 로그인 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "구글 로그인 오류: ${e.message}", Toast.LENGTH_LONG).show()
             Log.e("MainActivity", "구글 로그인 오류", e)
         }
     }
@@ -473,7 +494,8 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             // 사용자 정보 표시
             if (currentUser != null) {
@@ -713,6 +735,8 @@ fun LoginScreen(
     onGoogleLoginClick: () -> Unit,
     onTestLoginClick: () -> Unit
 ) {
+    var showTerms by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -722,8 +746,13 @@ fun LoginScreen(
                 .fillMaxSize()
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // 상단 콘텐츠 영역
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
             // 앱 로고/아이콘 영역
             Card(
                 modifier = Modifier
@@ -749,7 +778,7 @@ fun LoginScreen(
             
             // 앱 제목
             Text(
-                text = "플로팅 버튼 앱",
+                text = "이렇게 보내면 어때",
                 style = MaterialTheme.typography.headlineLarge,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -775,16 +804,6 @@ fun LoginScreen(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                 )
-                Text(
-                    text = "또는",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
             }
             
             // 카카오 로그인 버튼
@@ -794,37 +813,21 @@ fun LoginScreen(
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFFFE812) // 카카오 노란색
+                    containerColor = Color.Transparent
                 ),
                 shape = MaterialTheme.shapes.medium,
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // 카카오 아이콘 (말풍선 모양)
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.kakao_login_button),
+                        contentDescription = "카카오 로그인",
                         modifier = Modifier
-                            .size(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "💬",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(12.dp))
-                    
-                    Text(
-                        text = "카카오톡 계정으로 로그인",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.Black,
-                        modifier = Modifier.weight(1f)
+                            .fillMaxWidth()
+                            .height(56.dp)
                     )
                 }
             }
@@ -836,7 +839,8 @@ fun LoginScreen(
                 onClick = onGoogleLoginClick,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(56.dp)
+                    .alpha(0f), // 투명하게 만들어서 숨김
                 colors = CardDefaults.cardColors(
                     containerColor = Color.White
                 ),
@@ -920,21 +924,13 @@ fun LoginScreen(
                     )
                 }
             }
+            }
             
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // 이용약관 및 개인정보처리방침 동의 텍스트
-            Text(
-                text = "회원가입 없이 이용 가능하며 첫 로그인시 이용약관 및 개인정보처리방침 동의로 간주됩니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF666666),
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // 이용약관 및 개인정보처리방침 링크
+            // 하단 링크 영역 (디바이스 하단에 고정)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 이용약관 및 개인정보처리방침 링크
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -943,7 +939,7 @@ fun LoginScreen(
                     text = "이용약관",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF4285F4),
-                    modifier = Modifier.clickable { /* 이용약관 링크 */ }
+                    modifier = Modifier.clickable { showTerms = true }
                 )
                 Text(
                     text = " 및 ",
@@ -954,9 +950,24 @@ fun LoginScreen(
                     text = "개인정보처리방침",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF4285F4),
-                    modifier = Modifier.clickable { /* 개인정보처리방침 링크 */ }
+                    modifier = Modifier.clickable { showPrivacy = true }
                 )
             }
+            }
+        }
+        
+        // 이용약관 다이얼로그
+        if (showTerms) {
+            TermsDialog(
+                onDismiss = { showTerms = false }
+            )
+        }
+        
+        // 개인정보처리방침 다이얼로그
+        if (showPrivacy) {
+            PrivacyDialog(
+                onDismiss = { showPrivacy = false }
+            )
         }
     }
 }
@@ -1109,3 +1120,140 @@ private fun Typography() = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+@Composable
+fun TermsDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "이용약관",
+                style = MaterialTheme.typography.headlineSmall
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.height(400.dp)
+            ) {
+                item {
+                    Text(
+                        text = "제1조 (목적)\n" +
+                                "본 약관은 마인드브이알(이하 \"회사\")이 제공하는 \"이렇게 보내면 어때\" 서비스(이하 \"서비스\")의 이용과 관련하여 회사와 이용자 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.\n\n" +
+                                "제2조 (정의)\n" +
+                                "1. \"서비스\"란 AI 기반 텍스트 인식 및 답변 추천을 제공하는 플로팅 버튼 서비스를 의미합니다.\n" +
+                                "2. \"이용자\"란 서비스에 접속하여 본 약관에 따라 서비스를 이용하는 자를 의미합니다.\n\n" +
+                                "제3조 (약관의 효력 및 변경)\n" +
+                                "1. 본 약관은 이용자가 동의함으로써 효력을 발생합니다.\n" +
+                                "2. 회사는 필요에 따라 본 약관을 변경할 수 있으며, 변경된 약관은 서비스 내 공지사항을 통해 공지합니다.\n\n" +
+                                "제4조 (서비스의 제공)\n" +
+                                "1. 회사는 다음과 같은 서비스를 제공합니다:\n" +
+                                "   - 키보드 감지 및 화면 캡처\n" +
+                                " - 텍스트 인식(OCR) 기능\n" +
+                                " - AI 기반 답변 추천\n" +
+                                " - 플로팅 버튼을 통한 편의 기능\n\n" +
+                                "제5조 (이용자의 의무)\n" +
+                                "1. 이용자는 서비스를 이용함에 있어 다음 행위를 하여서는 안 됩니다:\n" +
+                                "   - 타인의 개인정보를 무단으로 수집하거나 이용하는 행위\n" +
+                                "   - 서비스의 안정적 운영을 방해하는 행위\n" +
+                                "   - 기타 관련 법령에 위반되는 행위\n\n" +
+                                "제6조 (개인정보 보호)\n" +
+                                "회사는 이용자의 개인정보를 보호하기 위해 개인정보처리방침을 수립하여 운영하며, 이용자의 개인정보는 관련 법령에 따라 보호됩니다.\n\n" +
+                                "제7조 (서비스의 중단)\n" +
+                                "1. 회사는 시스템 점검, 서버 증설 및 교체, 네트워크 불안정 등의 경우 서비스 제공을 일시적으로 중단할 수 있습니다.\n" +
+                                "2. 회사는 천재지변, 전쟁, 폐교 등 불가항력적 사유가 발생한 경우 서비스 제공을 중단할 수 있습니다.\n\n" +
+                                "제8조 (손해배상)\n" +
+                                "회사는 무료 서비스의 경우 서비스 이용과 관련하여 이용자에게 발생한 손해에 대하여 배상할 책임이 없습니다.\n\n" +
+                                "제9조 (준거법 및 관할법원)\n" +
+                                "본 약관은 대한민국 법률에 따라 규율되며, 서비스 이용과 관련하여 발생한 분쟁에 대해서는 회사의 본사 소재지를 관할하는 법원을 전속 관할법원으로 합니다.\n\n" +
+                                "본 약관은 2024년 1월 1일부터 시행합니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("확인")
+            }
+        }
+    )
+}
+
+@Composable
+fun PrivacyDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "개인정보처리방침",
+                style = MaterialTheme.typography.headlineSmall
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.height(400.dp)
+            ) {
+                item {
+                    Text(
+                        text = "제1조 (개인정보의 처리목적)\n" +
+                                "마인드브이알(이하 \"회사\")은 다음의 목적을 위하여 개인정보를 처리합니다:\n" +
+                                "1. 서비스 제공 및 계약 이행\n" +
+                                "2. 이용자 식별 및 본인 확인\n" +
+                                "3. 고객 상담 및 불만 처리\n" +
+                                "4. 서비스 개선 및 신규 서비스 개발\n\n" +
+                                "제2조 (처리하는 개인정보의 항목)\n" +
+                                "회사는 다음의 개인정보를 처리합니다:\n" +
+                                "1. 필수항목: 이메일 주소, 닉네임\n" +
+                                "2. 선택항목: 프로필 이미지\n" +
+                                "3. 자동수집항목: 서비스 이용 기록, 접속 로그, 쿠키, 접속 IP 정보\n\n" +
+                                "제3조 (개인정보의 처리 및 보유기간)\n" +
+                                "1. 회사는 법령에 따른 개인정보 보유·이용기간 또는 정보주체로부터 개인정보를 수집 시에 동의받은 개인정보 보유·이용기간 내에서 개인정보를 처리·보유합니다.\n" +
+                                "2. 각각의 개인정보 처리 및 보유 기간은 다음과 같습니다:\n" +
+                                "   - 서비스 이용 기록: 3년\n" +
+                                "   - 접속 로그: 1년\n\n" +
+                                "제4조 (개인정보의 제3자 제공)\n" +
+                                "회사는 정보주체의 개인정보를 제1조(개인정보의 처리목적)에서 명시한 범위 내에서만 처리하며, 정보주체의 동의, 법률의 특별한 규정 등 개인정보 보호법 제17조에 해당하는 경우에만 개인정보를 제3자에게 제공합니다.\n\n" +
+                                "제5조 (개인정보처리의 위탁)\n" +
+                                "회사는 원활한 개인정보 업무처리를 위하여 다음과 같이 개인정보 처리업무를 위탁하고 있습니다:\n" +
+                                "1. Firebase (Google): 사용자 인증 및 데이터 저장\n" +
+                                "2. Google Cloud: AI 서비스 제공\n\n" +
+                                "제6조 (정보주체의 권리·의무 및 행사방법)\n" +
+                                "정보주체는 회사에 대해 언제든지 다음 각 호의 개인정보 보호 관련 권리를 행사할 수 있습니다:\n" +
+                                "1. 개인정보 처리현황 통지 요구\n" +
+                                "2. 개인정보 열람 요구\n" +
+                                "3. 개인정보 정정·삭제 요구\n" +
+                                "4. 개인정보 처리정지 요구\n\n" +
+                                "제7조 (개인정보의 안전성 확보조치)\n" +
+                                "회사는 개인정보의 안전성 확보를 위해 다음과 같은 조치를 취하고 있습니다:\n" +
+                                "1. 관리적 조치: 내부관리계획 수립·시행, 정기적 직원 교육\n" +
+                                "2. 기술적 조치: 개인정보처리시스템 등의 접근권한 관리, 접근통제시스템 설치, 개인정보의 암호화, 보안프로그램 설치\n" +
+                                "3. 물리적 조치: 전산실, 자료보관실 등의 접근통제\n\n" +
+                                "제8조 (개인정보 보호책임자)\n" +
+                                "회사는 개인정보 처리에 관한 업무를 총괄해서 책임지고, 개인정보 처리와 관련한 정보주체의 불만처리 및 피해구제 등을 위하여 아래와 같이 개인정보 보호책임자를 지정하고 있습니다:\n" +
+                                "개인정보 보호책임자: 마인드브이알 개인정보보호팀\n" +
+                                "연락처: privacy@mindvr.co.kr\n\n" +
+                                "제9조 (권익침해 구제방법)\n" +
+                                "정보주체는 개인정보침해신고센터, 개인정보 분쟁조정위원회, 대검찰청 사이버범죄수사단, 경찰청 사이버테러대응센터 등에 분쟁해결이나 상담 등을 신청할 수 있습니다.\n\n" +
+                                "본 개인정보처리방침은 2024년 1월 1일부터 시행합니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("확인")
+            }
+        }
+    )
+}

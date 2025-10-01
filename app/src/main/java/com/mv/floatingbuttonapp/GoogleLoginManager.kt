@@ -35,9 +35,13 @@ class GoogleLoginManager(private val context: Context) {
     
     // Google Sign-In 클라이언트
     private val googleSignInClient: GoogleSignInClient by lazy {
+        val webClientId = context.getString(R.string.default_web_client_id)
+        Log.d(TAG, "웹 클라이언트 ID: $webClientId")
+        
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(context.getString(R.string.default_web_client_id))
+            .requestIdToken(webClientId)
             .requestEmail()
+            .requestProfile()
             .build()
         GoogleSignIn.getClient(context, gso)
     }
@@ -68,7 +72,10 @@ class GoogleLoginManager(private val context: Context) {
      * 구글 로그인 Intent 가져오기
      * @return Google Sign-In Intent
      */
-    fun getSignInIntent() = googleSignInClient.signInIntent
+    fun getSignInIntent(): android.content.Intent {
+        Log.d(TAG, "구글 로그인 Intent 생성")
+        return googleSignInClient.signInIntent
+    }
     
     /**
      * 구글 로그인 결과 처리
@@ -77,18 +84,74 @@ class GoogleLoginManager(private val context: Context) {
      */
     suspend fun handleSignInResult(data: android.content.Intent?): Result<LoginResult> = suspendCancellableCoroutine { continuation ->
         try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            val account = task.getResult(ApiException::class.java)
+            Log.d(TAG, "구글 로그인 결과 처리 시작")
+            Log.d(TAG, "Intent 데이터: $data")
             
-            if (account != null) {
-                Log.d(TAG, "구글 로그인 성공: ${account.displayName}")
-                firebaseAuthWithGoogle(account, continuation)
+            if (data == null) {
+                Log.e(TAG, "Intent 데이터가 null입니다")
+                continuation.resume(Result.failure(Exception("로그인 결과 데이터가 없습니다")))
+                return@suspendCancellableCoroutine
+            }
+            
+            // Intent의 extras를 자세히 로그로 출력
+            data.extras?.let { extras ->
+                Log.d(TAG, "Intent extras 키들: ${extras.keySet()}")
+                for (key in extras.keySet()) {
+                    Log.d(TAG, "Intent extra [$key]: ${extras.get(key)}")
+                }
+            }
+            
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            Log.d(TAG, "GoogleSignIn 태스크: $task")
+            Log.d(TAG, "태스크 성공 여부: ${task.isSuccessful}")
+            Log.d(TAG, "태스크 완료 여부: ${task.isComplete}")
+            Log.d(TAG, "태스크 예외: ${task.exception}")
+            
+            if (task.isSuccessful) {
+                val account = task.result
+                Log.d(TAG, "계정 정보: $account")
+                if (account != null) {
+                    Log.d(TAG, "구글 로그인 성공: ${account.displayName}, 이메일: ${account.email}")
+                    Log.d(TAG, "계정 ID: ${account.id}")
+                    Log.d(TAG, "ID 토큰 존재 여부: ${account.idToken != null}")
+                    Log.d(TAG, "ID 토큰 길이: ${account.idToken?.length ?: 0}")
+                    firebaseAuthWithGoogle(account, continuation)
+                } else {
+                    Log.e(TAG, "구글 계정 정보가 null입니다")
+                    continuation.resume(Result.failure(Exception("구글 계정 정보를 가져올 수 없습니다")))
+                }
             } else {
-                Log.e(TAG, "구글 계정 정보가 null입니다")
-                continuation.resume(Result.failure(Exception("구글 계정 정보를 가져올 수 없습니다")))
+                val exception = task.exception
+                Log.e(TAG, "구글 로그인 태스크 실패: ${exception?.message}")
+                Log.e(TAG, "예외 타입: ${exception?.javaClass?.simpleName}")
+                Log.e(TAG, "예외 상세: ${exception?.localizedMessage}")
+                
+                // ApiException인 경우 상태 코드 확인
+                if (exception is ApiException) {
+                    Log.e(TAG, "ApiException 상태 코드: ${exception.statusCode}")
+                    when (exception.statusCode) {
+                        7 -> continuation.resume(Result.failure(Exception("네트워크 연결을 확인해주세요")))
+                        8 -> continuation.resume(Result.failure(Exception("구글 서비스에 연결할 수 없습니다")))
+                        10 -> continuation.resume(Result.failure(Exception("개발자 콘솔에서 OAuth 클라이언트 ID를 확인해주세요")))
+                        12501 -> continuation.resume(Result.failure(Exception("사용자가 로그인을 취소했습니다")))
+                        else -> continuation.resume(Result.failure(Exception("구글 로그인 실패 (코드: ${exception.statusCode}): ${exception.message}")))
+                    }
+                } else {
+                    continuation.resume(Result.failure(exception ?: Exception("구글 로그인 태스크 실패")))
+                }
             }
         } catch (e: ApiException) {
-            Log.e(TAG, "구글 로그인 실패", e)
+            Log.e(TAG, "구글 로그인 ApiException: ${e.statusCode} - ${e.message}")
+            Log.e(TAG, "ApiException 상세: ${e.localizedMessage}")
+            when (e.statusCode) {
+                7 -> continuation.resume(Result.failure(Exception("네트워크 연결을 확인해주세요")))
+                8 -> continuation.resume(Result.failure(Exception("구글 서비스에 연결할 수 없습니다")))
+                10 -> continuation.resume(Result.failure(Exception("개발자 콘솔에서 OAuth 클라이언트 ID를 확인해주세요")))
+                12501 -> continuation.resume(Result.failure(Exception("사용자가 로그인을 취소했습니다")))
+                else -> continuation.resume(Result.failure(Exception("구글 로그인 실패: ${e.message}")))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "구글 로그인 일반 오류", e)
             continuation.resume(Result.failure(e))
         }
     }
