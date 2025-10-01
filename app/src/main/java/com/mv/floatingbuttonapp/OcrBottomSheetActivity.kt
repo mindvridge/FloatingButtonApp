@@ -147,7 +147,19 @@ fun OcrBottomSheetContent(
     onRetry: () -> Unit
 ) {
     val context = LocalContext.current
-    var ocrText by remember { mutableStateOf(initialText) }
+    
+    // OCR 텍스트를 자동으로 정리하여 초기화
+    var ocrText by remember { 
+        mutableStateOf(
+            if (initialText.isNotEmpty()) {
+                val cleanedText = cleanAndFormatOcrText(initialText)
+                Log.d("OCR_CLEANUP", "초기 텍스트 정리 완료: '$cleanedText'")
+                cleanedText
+            } else {
+                initialText
+            }
+        )
+    }
     var showCopiedMessage by remember { mutableStateOf(false) }
     var isEditMode by remember { mutableStateOf(false) }
     var showResponseOptions by remember { mutableStateOf(false) }
@@ -565,10 +577,35 @@ fun OcrBottomSheetContent(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "인식된 텍스트가 정확하지 않다면 직접 수정할 수 있습니다.",
+                                text = "인식된 텍스트가 정확하지 않다면 직접 수정하거나 다시 정리할 수 있습니다.",
                                 fontSize = 12.sp,
                                 color = Color(0xFF666666)
                             )
+                        }
+                        
+                        // 다시 정리 버튼 추가
+                        if (ocrText.isNotEmpty()) {
+                            Button(
+                                onClick = {
+                                    val originalText = initialText // 원본 텍스트에서 다시 정리
+                                    val cleanedText = cleanAndFormatOcrText(originalText)
+                                    ocrText = cleanedText
+                                    isEditMode = true
+                                    Toast.makeText(context, "텍스트를 다시 정리했습니다.", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4A90E2)
+                                )
+                            ) {
+                                Text(
+                                    text = "다시 정리",
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                            }
                         }
 
 
@@ -830,6 +867,311 @@ fun mapLengthToApiValue(length: String): String {
         "길게", "긴", "자세" -> "길게"
         else -> "중간" // 기본값
     }
+}
+
+/**
+ * OCR 인식된 텍스트를 정리하여 대화 형식으로 변환하는 함수
+ * 
+ * @param rawOcrText OCR로 인식된 원본 텍스트
+ * @return 정리된 대화 형식의 텍스트
+ */
+fun cleanAndFormatOcrText(rawOcrText: String): String {
+    if (rawOcrText.isBlank()) return ""
+    
+    Log.d("OCR_CLEANUP", "원본 OCR 텍스트: $rawOcrText")
+    
+    // 1. 줄바꿈으로 분할하고 정리
+    val lines = rawOcrText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+    Log.d("OCR_CLEANUP", "분할된 줄들: $lines")
+    
+    val messages = mutableListOf<Pair<String, String>>() // (화자, 메시지)
+    var currentSpeaker = ""
+    var currentMessage = ""
+    
+    for (line in lines) {
+        // 2. 시간 패턴 제거 (오후 4:43, 오후 4:46 등)
+        if (isTimePattern(line)) {
+            Log.d("OCR_CLEANUP", "시간 패턴 제거: $line")
+            continue
+        }
+        
+        // 3. URL 패턴 제거
+        if (isUrlPattern(line)) {
+            Log.d("OCR_CLEANUP", "URL 패턴 제거: $line")
+            continue
+        }
+        
+        // 4. 숫자만 있는 줄 제거 (1, 2, 3, 4, 5, 6, 7, 8, 9, 0 등)
+        if (isNumberOnlyPattern(line)) {
+            Log.d("OCR_CLEANUP", "숫자만 있는 줄 제거: $line")
+            continue
+        }
+        
+        // 5. 키보드 관련 텍스트 제거 (ㄷ, ㅋ, 트, 초, 요, 이, ㅠ 등)
+        if (isKeyboardPattern(line)) {
+            Log.d("OCR_CLEANUP", "키보드 패턴 제거: $line")
+            continue
+        }
+        
+        // 6. UI 관련 텍스트 제거
+        if (isUIElementPattern(line)) {
+            Log.d("OCR_CLEANUP", "UI 요소 패턴 제거: $line")
+            continue
+        }
+        
+        // 7. 화자 식별 (개선된 로직)
+        val speaker = identifySpeakerImproved(line)
+        if (speaker.isNotEmpty()) {
+            // 이전 메시지가 있으면 저장
+            if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
+                messages.add(Pair(currentSpeaker, currentMessage.trim()))
+                Log.d("OCR_CLEANUP", "메시지 저장: [$currentSpeaker] $currentMessage")
+            }
+            // 새 화자로 시작
+            currentSpeaker = speaker
+            currentMessage = extractMessageFromLine(line, speaker)
+        } else if (isValidMessage(line)) {
+            // 유효한 메시지인 경우
+            val messageOwner = identifyMessageOwner(line)
+            
+            if (messageOwner.isNotEmpty()) {
+                // 명확히 화자가 식별된 경우
+                if (currentSpeaker == messageOwner && currentMessage.isNotEmpty()) {
+                    // 같은 화자의 메시지를 연결
+                    currentMessage += " " + line
+                } else {
+                    // 다른 화자이거나 새로운 메시지인 경우
+                    if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
+                        messages.add(Pair(currentSpeaker, currentMessage.trim()))
+                        Log.d("OCR_CLEANUP", "메시지 저장: [$currentSpeaker] $currentMessage")
+                    }
+                    currentSpeaker = messageOwner
+                    currentMessage = line
+                }
+            } else if (currentSpeaker.isNotEmpty()) {
+                // 현재 화자가 있으면 같은 메시지로 병합 (여러 줄로 나뉜 메시지)
+                currentMessage += " " + line
+            } else {
+                // 화자를 추정해야 하는 경우
+                currentSpeaker = estimateSpeaker(line, messages)
+                currentMessage = line
+            }
+        }
+    }
+    
+    // 마지막 메시지 저장
+    if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
+        messages.add(Pair(currentSpeaker, currentMessage.trim()))
+        Log.d("OCR_CLEANUP", "마지막 메시지 저장: [$currentSpeaker] $currentMessage")
+    }
+    
+    // 8. "상대방"을 실제 상대방 이름으로 교체
+    // 먼저 실제 상대방 이름을 찾기 (엄마, 아빠, 친구 등)
+    val actualSpeakerName = messages.firstOrNull { it.first != "나" && it.first != "상대방" }?.first
+    val finalMessages = messages.map { (speaker, message) ->
+        val finalSpeaker = when {
+            speaker == "상대방" && actualSpeakerName != null -> actualSpeakerName
+            speaker == "상대방" -> "상대방" // 실제 이름을 찾지 못한 경우
+            else -> speaker
+        }
+        Pair(finalSpeaker, message)
+    }
+    
+    // 9. 최종 형식으로 변환
+    val result = finalMessages.joinToString("\n") { (speaker, message) ->
+        "[$speaker] $message"
+    }
+    
+    Log.d("OCR_CLEANUP", "최종 결과: $result")
+    return result
+}
+
+/**
+ * 시간 패턴인지 확인하는 함수
+ */
+private fun isTimePattern(line: String): Boolean {
+    val timePatterns = listOf(
+        Regex("오후\\s*\\d{1,2}:\\d{2}"),
+        Regex("오전\\s*\\d{1,2}:\\d{2}"),
+        Regex("\\d{1,2}:\\d{2}"),
+        Regex("\\d{1,2}시\\s*\\d{1,2}분"),
+        Regex("AM\\s*\\d{1,2}:\\d{2}"),
+        Regex("PM\\s*\\d{1,2}:\\d{2}")
+    )
+    return timePatterns.any { it.matches(line) }
+}
+
+/**
+ * URL 패턴인지 확인하는 함수
+ */
+private fun isUrlPattern(line: String): Boolean {
+    return line.contains("http") || line.contains("www.") || 
+           line.contains(".com") || line.contains(".kr") ||
+           line.contains("://") || line.contains("/")
+}
+
+/**
+ * 숫자만 있는 패턴인지 확인하는 함수
+ */
+private fun isNumberOnlyPattern(line: String): Boolean {
+    return line.matches(Regex("^[\\d\\s\\+\\-\\*\\/\\=\\.]+$")) && line.length <= 5
+}
+
+/**
+ * 키보드 관련 패턴인지 확인하는 함수
+ */
+private fun isKeyboardPattern(line: String): Boolean {
+    val keyboardPatterns = listOf(
+        "ㄷ", "ㅋ", "트", "초", "요", "이", "ㅠ", "L", "Pass"
+    )
+    return keyboardPatterns.contains(line) || line.matches(Regex("^[ㄱ-ㅎㅏ-ㅣ\\s]+$"))
+}
+
+/**
+ * UI 요소 패턴인지 확인하는 함수
+ */
+private fun isUIElementPattern(line: String): Boolean {
+    val uiPatterns = listOf(
+        "메시지 입력", "←", "→", "+", "!", "#", "Ut"
+    )
+    // UI 요소나 너무 짧은 텍스트(특수문자, 기호 등)는 제외
+    // 단, 한글로만 구성된 3자 이상의 텍스트는 유지
+    val isShortAndMeaningless = line.length <= 3 && !line.matches(Regex("^[가-힣]+$"))
+    return uiPatterns.contains(line) || isShortAndMeaningless
+}
+
+/**
+ * 유효한 메시지인지 확인하는 함수
+ */
+private fun isValidMessage(line: String): Boolean {
+    return line.length > 3 && !isTimePattern(line) && !isUrlPattern(line) && 
+           !isNumberOnlyPattern(line) && !isKeyboardPattern(line) && !isUIElementPattern(line)
+}
+
+/**
+ * 개선된 화자 식별 함수
+ */
+private fun identifySpeakerImproved(line: String): String {
+    // 엄마 관련 패턴
+    if (line.contains("엄마") && line.length <= 10) {
+        return "엄마"
+    }
+    
+    // 다른 일반적인 화자 패턴들
+    val speakerPatterns = listOf(
+        "아빠", "할머니", "할아버지", "언니", "누나", "형", "오빠",
+        "친구", "동생", "선생님", "회장님", "과장님", "부장님"
+    )
+    
+    for (pattern in speakerPatterns) {
+        if (line.contains(pattern) && line.length <= 15) {
+            return pattern
+        }
+    }
+    
+    return ""
+}
+
+/**
+ * 메시지 내용을 분석하여 화자를 식별하는 함수
+ * "나"의 메시지인지 상대방의 메시지인지 명확히 판단 가능한 경우에만 반환
+ */
+private fun identifyMessageOwner(line: String): String {
+    // "나"의 전형적인 짧은 대답이나 동의 표현
+    val myPatterns = listOf(
+        Regex("^네$"), Regex("^응$"), Regex("^알겠어(요)?$"),
+        Regex("^좋아요?$"), Regex("^괜찮아요?$"), Regex("^예$"),
+        Regex(".*안가도.*되잖아$"), // "약수동 안가도 되잖아"와 같은 패턴
+        Regex(".*괜찮아요?$"), Regex(".*알겠어요?$"), Regex(".*좋아요?$")
+    )
+    
+    // 상대방의 전형적인 설명이나 요청 표현
+    val theirPatterns = listOf(
+        Regex(".*가려고.*약속했어.*"), // "원래 2일날 같이 택사시타고 가려고 약속했어"
+        Regex(".*물어보는거야$"), // "그래서 물어보는거야"
+        Regex(".*연락할[거게께]$"), // "연락해 그리고나서 연락할께"
+        Regex(".*해줘.*"), Regex(".*해봐.*"),
+        Regex(".*어때\\??"), Regex(".*할거.*")
+    )
+    
+    // "나"의 메시지 패턴 확인
+    if (myPatterns.any { it.matches(line) }) {
+        return "나"
+    }
+    
+    // 상대방의 메시지 패턴 확인
+    if (theirPatterns.any { it.matches(line) }) {
+        return "상대방"
+    }
+    
+    return "" // 명확하지 않은 경우 빈 문자열 반환
+}
+
+/**
+ * 화자를 추정하는 함수 (이전 메시지 패턴 기반)
+ */
+private fun estimateSpeaker(line: String, messages: List<Pair<String, String>>): String {
+    // 먼저 내용을 보고 명확히 판단 가능한 경우 먼저 처리
+    val speaker = identifyMessageOwner(line)
+    if (speaker.isNotEmpty()) {
+        return speaker
+    }
+    
+    // 이전 메시지가 있으면 마지막 화자와 반대 화자 추정
+    if (messages.isNotEmpty()) {
+        val lastSpeaker = messages.last().first
+        return when (lastSpeaker) {
+            "엄마" -> "나"
+            "나" -> "엄마"
+            "상대방" -> "나"
+            else -> "나" // 기본적으로 "나"로 추정
+        }
+    }
+    
+    // 첫 번째 메시지인 경우, 내용을 보고 추정
+    return when {
+        // "나"의 전형적인 응답 패턴
+        line.contains("네") || line.contains("알겠어요") || line.contains("좋아요") || 
+        line.contains("감사합니다") || line.contains("죄송합니다") || 
+        line.contains("연락주세요") || line.contains("괜찮아요") ||
+        line.contains("예") || line.contains("응") || line.contains("그래요") ||
+        line.contains("맞아요") || line.contains("알겠습니다") -> "나"
+        // 질문이나 요청하는 패턴은 상대방
+        line.contains("?") || line.contains("어떻게") ||
+        line.contains("가려고") || line.contains("할거") || line.contains("해줘") ||
+        line.contains("약속했어") || line.contains("물어보는거야") -> "상대방"
+        else -> "나" // 기본적으로 "나"로 추정
+    }
+}
+
+/**
+ * "나"의 메시지 패턴을 더 정확히 식별하는 함수
+ */
+private fun identifyMyMessage(line: String): Boolean {
+    val myMessagePatterns = listOf(
+        "네", "알겠어요", "좋아요", "감사합니다", "죄송합니다", "연락주세요",
+        "괜찮아요", "예", "응", "그래요", "맞아요", "알겠습니다", "네 알겠어요",
+        "좋아요 연락주세요", "네 감사합니다", "네 괜찮아요", "네 알겠습니다",
+        "좋습니다", "알겠어요", "네 좋아요", "네 괜찮아요"
+    )
+    
+    // 부분 일치도 확인
+    val partialPatterns = listOf(
+        "네 ", "알겠", "좋아", "감사", "죄송", "연락", "괜찮", "예", "응"
+    )
+    
+    return myMessagePatterns.any { pattern -> 
+        line.contains(pattern, ignoreCase = true) 
+    } || partialPatterns.any { pattern ->
+        line.startsWith(pattern, ignoreCase = true) && line.length <= 20
+    }
+}
+
+/**
+ * 라인에서 화자를 제외한 메시지를 추출하는 함수
+ */
+private fun extractMessageFromLine(line: String, speaker: String): String {
+    return line.replace(speaker, "").trim()
 }
 
 
