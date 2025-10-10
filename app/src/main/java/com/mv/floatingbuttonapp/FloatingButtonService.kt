@@ -15,6 +15,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.*
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -28,8 +29,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
+import com.mv.floatingbuttonapp.R
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -974,6 +977,14 @@ class FloatingButtonService :
         val keywords = extractKeywords(originalText)
         Log.d(TAG, "추출된 키워드: $keywords")
         
+        // 채팅 메시지 형식으로 정리 (텍스트가 메시지 타입인 경우)
+        val formattedText = if (textType == TextType.MESSAGE || textType == TextType.QUESTION) {
+            formatChatMessages(visionText)
+        } else {
+            originalText
+        }
+        Log.d(TAG, "정리된 텍스트: $formattedText")
+        
         // 채팅 분석 (텍스트가 메시지 타입인 경우)
         val chatAnalysis = if (textType == TextType.MESSAGE) {
             analyzeChatMessage(visionText, originalText)
@@ -983,7 +994,7 @@ class FloatingButtonService :
         Log.d(TAG, "채팅 분석: ${chatAnalysis?.sender}")
         
         // 추천 답변 생성 (채팅 분석 결과 반영)
-        val suggestions = generateSmartSuggestions(originalText, textType, chatAnalysis)
+        val suggestions = generateSmartSuggestions(formattedText, textType, chatAnalysis)
         Log.d(TAG, "생성된 추천: ${suggestions.size}개")
         
         // 신뢰도 계산
@@ -991,7 +1002,7 @@ class FloatingButtonService :
         Log.d(TAG, "신뢰도: $confidence")
         
         return OcrAnalysis(
-            originalText = originalText,
+            originalText = formattedText, // 정리된 텍스트 사용
             textType = textType,
             confidence = confidence,
             language = language,
@@ -1000,6 +1011,127 @@ class FloatingButtonService :
             entities = entities,
             chatAnalysis = chatAnalysis
         )
+    }
+    
+    /**
+     * 채팅 메시지를 위치 기반으로 상대방/나로 구분하여 정리
+     * 개선: 라인 단위로 분석하여 더 정확한 발신자 판단
+     */
+    private fun formatChatMessages(visionText: Text): String {
+        Log.d(TAG, "=== 채팅 메시지 형식 정리 시작 ===")
+        
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenCenter = screenWidth / 2
+        val messages = mutableListOf<Triple<Int, String, String>>() // (Y좌표, 발신자, 메시지)
+        
+        Log.d(TAG, "화면 정보: 너비=$screenWidth, 중앙=$screenCenter")
+        
+        // 각 텍스트 블록의 라인 단위로 분석
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                val lineText = line.text.trim()
+                
+                // 불필요한 텍스트 필터링
+                if (shouldSkipText(lineText)) {
+                    Log.d(TAG, "텍스트 스킵: $lineText")
+                    continue
+                }
+                
+                // 라인의 위치 정보 가져오기
+                val boundingBox = line.boundingBox
+                if (boundingBox == null) {
+                    Log.d(TAG, "boundingBox가 null: $lineText")
+                    continue
+                }
+                
+                // 라인의 왼쪽 끝과 오른쪽 끝 좌표
+                val lineLeft = boundingBox.left
+                val lineRight = boundingBox.right
+                val lineCenter = (lineLeft + lineRight) / 2
+                val lineY = boundingBox.top // Y 좌표 (위에서부터)
+                
+                // 왼쪽/오른쪽 판단
+                // 왼쪽에 있으면 상대방, 오른쪽에 있으면 나
+                val sender = if (lineCenter < screenCenter) {
+                    "상대방" // 왼쪽
+                } else {
+                    "나"     // 오른쪽
+                }
+                
+                val leftPercent = (lineLeft.toFloat() / screenWidth * 100).toInt()
+                val rightPercent = (lineRight.toFloat() / screenWidth * 100).toInt()
+                val centerPercent = (lineCenter.toFloat() / screenWidth * 100).toInt()
+                
+                Log.d(TAG, "[$sender] $lineText")
+                Log.d(TAG, "  위치: 왼쪽=$leftPercent%, 중앙=$centerPercent%, 오른쪽=$rightPercent% (Y=$lineY)")
+                
+                messages.add(Triple(lineY, sender, lineText))
+            }
+        }
+        
+        // Y 좌표 기준으로 정렬 (위에서 아래로)
+        messages.sortBy { it.first }
+        
+        Log.d(TAG, "=== 정렬 후 메시지 목록 ===")
+        messages.forEachIndexed { index, (y, sender, text) ->
+            Log.d(TAG, "$index. [Y=$y] [$sender] $text")
+        }
+        
+        // 연속된 같은 발신자의 메시지 병합 (줄바꿈으로 구분)
+        val mergedMessages = mutableListOf<Pair<String, String>>()
+        var currentSender = ""
+        var currentMessage = ""
+        
+        for ((_, sender, message) in messages) {
+            if (sender == currentSender) {
+                // 같은 발신자면 줄바꿈으로 메시지 병합
+                currentMessage += "\n$message"
+            } else {
+                // 다른 발신자면 이전 메시지 저장
+                if (currentSender.isNotEmpty() && currentMessage.isNotEmpty()) {
+                    mergedMessages.add(Pair(currentSender, currentMessage.trim()))
+                }
+                currentSender = sender
+                currentMessage = message
+            }
+        }
+        
+        // 마지막 메시지 저장
+        if (currentSender.isNotEmpty() && currentMessage.isNotEmpty()) {
+            mergedMessages.add(Pair(currentSender, currentMessage.trim()))
+        }
+        
+        // 형식화된 문자열로 변환
+        val formattedText = mergedMessages.joinToString("\n\n") { (sender, message) ->
+            "[$sender]\n$message"
+        }
+        
+        Log.d(TAG, "=== 채팅 메시지 정리 완료 ===")
+        Log.d(TAG, formattedText)
+        return formattedText.ifEmpty { visionText.text }
+    }
+    
+    /**
+     * 텍스트를 건너뛸지 판단 (시간, URL, UI 요소 등)
+     */
+    private fun shouldSkipText(text: String): Boolean {
+        if (text.length < 2) return true
+        
+        // 시간 패턴
+        if (text.matches(Regex("(오전|오후)?\\s*\\d{1,2}:\\d{2}"))) return true
+        if (text.matches(Regex("\\d{1,2}시\\s*\\d{1,2}분"))) return true
+        
+        // 숫자만
+        if (text.matches(Regex("^[\\d\\s]+$")) && text.length <= 5) return true
+        
+        // 단일 자음/모음
+        if (text.matches(Regex("^[ㄱ-ㅎㅏ-ㅣ]+$"))) return true
+        
+        // UI 요소
+        val uiElements = listOf("메시지 입력", "←", "→", "+", "!", "#", "검색", "전송", "답장")
+        if (uiElements.any { text.contains(it) }) return true
+        
+        return false
     }
     
     /**
@@ -1888,24 +2020,24 @@ fun FloatingButtonContent(
         FloatingActionButton(
             onClick = onButtonClick,
             modifier = Modifier
-                .size(44.dp)  // 적당한 크기로 조정 (40dp → 44dp)
+                .size(56.dp)  // 아이콘에 맞게 크기 조정
                 .shadow(
                     elevation = 8.dp,
                     shape = CircleShape,
                     ambientColor = Color.Black.copy(alpha = 0.15f),
                     spotColor = Color.Black.copy(alpha = 0.25f)
                 ),
-            containerColor = Color(0xFF2196F3),  // 깔끔한 파란색
-            contentColor = Color.White,
+            containerColor = Color.Transparent,  // 투명한 배경
+            contentColor = Color.Transparent,    // 투명한 콘텐츠 색상
             elevation = FloatingActionButtonDefaults.elevation(
-                defaultElevation = 6.dp,
-                pressedElevation = 12.dp
+                defaultElevation = 0.dp,        // 그림자 제거
+                pressedElevation = 0.dp         // 눌렸을 때도 그림자 제거
             )
         ) {
-            Icon(
-                Icons.Default.TextFields,  // 텍스트 인식에 더 적합한 아이콘
+            Image(
+                painter = painterResource(id = R.drawable.mik_na_circle_app_icon_with_one_hand_out),
                 contentDescription = "텍스트 인식",
-                modifier = Modifier.size(20.dp)  // 아이콘 크기 조정
+                modifier = Modifier.size(48.dp)  // 아이콘 크기 조정
             )
         }
     }

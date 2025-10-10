@@ -199,21 +199,36 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
     }
 
     private fun detectKeyboard(): Boolean {
-        // 방법 1: IME 윈도우 확인
+        // 방법 1: IME 윈도우 확인 (가장 신뢰도가 높음)
         val windows = windows
         for (window in windows) {
             if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
                 // IME 윈도우가 있으면 키보드가 표시됨
                 window.getBoundsInScreen(screenBounds)
                 val height = screenBounds.height()
+                
+                // 키보드 높이가 100px 이상일 때만 키보드로 인정
                 if (height > 100) {
-                    keyboardHeight = height
-                    return true
+                    // 추가 확인: 입력 필드에 포커스가 있는지 확인
+                    if (hasInputFieldFocus()) {
+                        keyboardHeight = height
+                        Log.d(TAG, "IME 윈도우 감지됨 - 키보드 높이: $height, 입력 필드 포커스: true")
+                        return true
+                    } else {
+                        Log.d(TAG, "IME 윈도우는 있지만 입력 필드 포커스 없음 - 키보드 아님")
+                    }
                 }
             }
         }
 
-        // 방법 2: 화면 하단 영역 확인
+        // 방법 2: 화면 하단 영역 확인 (보조적 방법)
+        // 이 방법은 IME 윈도우를 감지하지 못했을 때만 사용
+        // 입력 필드에 포커스가 있을 때만 작동
+        if (!hasInputFieldFocus()) {
+            // 입력 필드에 포커스가 없으면 키보드가 표시되지 않은 것으로 판단
+            return false
+        }
+        
         val rootNode = rootInActiveWindow
         if (rootNode != null) {
             val rect = Rect()
@@ -222,15 +237,43 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
             // 화면 높이와 실제 보이는 영역의 차이 계산
             val heightDiff = screenHeight - rect.bottom
 
-            // 차이가 200dp 이상이면 키보드가 표시된 것으로 판단
-            val threshold = (200 * resources.displayMetrics.density).toInt()
+            // 차이가 300dp 이상이면 키보드가 표시된 것으로 판단 (더 엄격한 기준)
+            val threshold = (300 * resources.displayMetrics.density).toInt()
             if (heightDiff > threshold) {
                 keyboardHeight = heightDiff
+                Log.d(TAG, "화면 영역 차이 감지됨 - 키보드 높이: $heightDiff, 입력 필드 포커스: true")
                 return true
             }
         }
 
         return false
+    }
+    
+    /**
+     * 입력 필드에 포커스가 있는지 확인
+     * EditText나 다른 입력 필드에 포커스가 있어야 키보드가 표시된 것으로 간주
+     */
+    private fun hasInputFieldFocus(): Boolean {
+        return try {
+            val rootNode = rootInActiveWindow
+            if (rootNode == null) {
+                Log.d(TAG, "rootInActiveWindow가 null - 입력 필드 포커스 없음")
+                return false
+            }
+            
+            // 포커스된 입력 필드가 있는지 확인
+            val focusedNode = findFocusedInputField(rootNode)
+            val hasFocus = focusedNode != null
+            
+            if (hasFocus) {
+                Log.d(TAG, "입력 필드 포커스 있음: ${focusedNode?.className}")
+            }
+            
+            hasFocus
+        } catch (e: Exception) {
+            Log.e(TAG, "입력 필드 포커스 확인 중 오류", e)
+            false
+        }
     }
     
     /**

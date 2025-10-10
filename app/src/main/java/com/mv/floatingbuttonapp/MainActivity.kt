@@ -17,6 +17,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -597,7 +598,7 @@ fun MainScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // 사용자 정보 표시
+            // 사용자 정보 표시 (중앙 정렬)
             if (currentUser != null) {
                 Card(
                     modifier = Modifier
@@ -607,31 +608,33 @@ fun MainScreen(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = "사용자",
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(48.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "안녕하세요!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = currentUser.nickname ?: "사용자",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "안녕하세요!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = currentUser.nickname ?: "사용자",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
@@ -845,6 +848,20 @@ fun LoginScreen(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
+            // 배경 이미지
+            Image(
+                painter = painterResource(id = R.drawable.mik_na_ill_be_happy),
+                contentDescription = "로그인 배경",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
+            )
+            
+            // 어두운 오버레이 (가독성 향상)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+            )
             // 중앙 콘텐츠 영역 (아이콘, 텍스트, 로그인 버튼)
             Column(
                 modifier = Modifier
@@ -854,32 +871,26 @@ fun LoginScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 // 앱 로고/아이콘 영역
-                Card(
+                Image(
+                    painter = painterResource(id = R.drawable.mik_na_app_icon),
+                    contentDescription = "앱 로고",
                     modifier = Modifier
-                        .size(120.dp)
+                        .size(360.dp)
                         .padding(bottom = 32.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "앱 로고",
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
+                    contentScale = ContentScale.Fit
+                )
                 
                 // 앱 제목
                 Text(
                     text = "이렇게 보내면 어때",
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black,
+                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                            blurRadius = 4f
+                        )
+                    ),
+                    color = Color.White,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -887,9 +898,15 @@ fun LoginScreen(
                 // 앱 설명
                 Text(
                     text = "스마트한 텍스트 인식과 AI 답변 추천을 위한\n플로팅 버튼 서비스입니다",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black,
+                            offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                            blurRadius = 2f
+                        )
+                    ),
                     textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = 0.9f),
                     modifier = Modifier.padding(bottom = 48.dp)
                 )
                 
@@ -902,7 +919,7 @@ fun LoginScreen(
                 ) {
                     HorizontalDivider(
                         modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        color = Color.White.copy(alpha = 0.5f)
                     )
                 }
                 
@@ -1025,19 +1042,37 @@ fun LoginScreen(
                 ) {
                     Text(
                         text = "이용약관",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF4285F4),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            shadow = androidx.compose.ui.graphics.Shadow(
+                                color = Color.Black,
+                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                blurRadius = 2f
+                            )
+                        ),
+                        color = Color.White,
                         modifier = Modifier.clickable { showTerms = true }
                     )
                     Text(
                         text = " 및 ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF666666)
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            shadow = androidx.compose.ui.graphics.Shadow(
+                                color = Color.Black,
+                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                blurRadius = 2f
+                            )
+                        ),
+                        color = Color.White.copy(alpha = 0.8f)
                     )
                     Text(
                         text = "개인정보처리방침",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF4285F4),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            shadow = androidx.compose.ui.graphics.Shadow(
+                                color = Color.Black,
+                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                blurRadius = 2f
+                            )
+                        ),
+                        color = Color.White,
                         modifier = Modifier.clickable { showPrivacy = true }
                     )
                 }

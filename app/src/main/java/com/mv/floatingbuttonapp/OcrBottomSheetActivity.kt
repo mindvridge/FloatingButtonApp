@@ -518,25 +518,60 @@ fun OcrBottomSheetContent(
                                 .padding(12.dp)
                         ) {
                             if (ocrText.isNotEmpty()) {
-                                // OCR 텍스트가 있는 경우
-                                OutlinedTextField(
-                                    value = ocrText,
-                                    onValueChange = {
-                                        ocrText = it
-                                        isEditMode = true
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent
-                                    ),
-                                    textStyle = LocalTextStyle.current.copy(
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF333333)
-                                    )
-                                )
+                                // OCR 텍스트가 있는 경우 - 스크롤 가능한 Text로 표시
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                // 텍스트를 줄 단위로 분리하여 표시
+                                ocrText.split("\n").forEach { line ->
+                                    when {
+                                        line.startsWith("[") && !line.startsWith("[나]") -> {
+                                            // 상대방 메시지 (나가 아닌 모든 화자)
+                                            Text(
+                                                text = line,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF2196F3), // 파란색
+                                                fontWeight = FontWeight.Medium,
+                                                lineHeight = 22.sp,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp)
+                                            )
+                                        }
+                                        line.startsWith("[나]") -> {
+                                            // 나의 메시지
+                                            Text(
+                                                text = line,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF4CAF50), // 초록색
+                                                fontWeight = FontWeight.Medium,
+                                                lineHeight = 22.sp,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp)
+                                            )
+                                        }
+                                        line.isNotBlank() -> {
+                                            // 일반 텍스트
+                                            Text(
+                                                text = line,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF333333),
+                                                lineHeight = 22.sp,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp)
+                                            )
+                                        }
+                                        line.isBlank() -> {
+                                            // 빈 줄인 경우 간격 추가
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
+                                    }
+                                }
+                                }
                             } else if (suggestions.isNotEmpty()) {
                                 // OCR 텍스트가 없고 추천 답변만 있는 경우
                                 Column(
@@ -931,8 +966,8 @@ fun cleanAndFormatOcrText(rawOcrText: String): String {
             if (messageOwner.isNotEmpty()) {
                 // 명확히 화자가 식별된 경우
                 if (currentSpeaker == messageOwner && currentMessage.isNotEmpty()) {
-                    // 같은 화자의 메시지를 연결
-                    currentMessage += " " + line
+                    // 같은 화자의 메시지를 연결 (줄바꿈으로 구분)
+                    currentMessage += "\n" + line
                 } else {
                     // 다른 화자이거나 새로운 메시지인 경우
                     if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
@@ -944,7 +979,7 @@ fun cleanAndFormatOcrText(rawOcrText: String): String {
                 }
             } else if (currentSpeaker.isNotEmpty()) {
                 // 현재 화자가 있으면 같은 메시지로 병합 (여러 줄로 나뉜 메시지)
-                currentMessage += " " + line
+                currentMessage += "\n" + line
             } else {
                 // 화자를 추정해야 하는 경우
                 currentSpeaker = estimateSpeaker(line, messages)
@@ -960,12 +995,12 @@ fun cleanAndFormatOcrText(rawOcrText: String): String {
     }
     
     // 8. "상대방"을 실제 상대방 이름으로 교체
-    // 먼저 실제 상대방 이름을 찾기 (엄마, 아빠, 친구 등)
-    val actualSpeakerName = messages.firstOrNull { it.first != "나" && it.first != "상대방" }?.first
+    // 실제 상대방 이름을 찾기 (엄마, 아빠, 친구 등)
+    val actualSpeakerName = findActualSpeakerName(messages)
     val finalMessages = messages.map { (speaker, message) ->
         val finalSpeaker = when {
-            speaker == "상대방" && actualSpeakerName != null -> actualSpeakerName
-            speaker == "상대방" -> "상대방" // 실제 이름을 찾지 못한 경우
+            speaker == "상대방" && actualSpeakerName.isNotEmpty() -> actualSpeakerName
+            speaker == "상대방" -> "이름" // 실제 이름을 찾지 못한 경우 "이름"으로 표시
             else -> speaker
         }
         Pair(finalSpeaker, message)
@@ -1166,6 +1201,17 @@ private fun identifyMyMessage(line: String): Boolean {
  */
 private fun extractMessageFromLine(line: String, speaker: String): String {
     return line.replace(speaker, "").trim()
+}
+
+/**
+ * 실제 상대방 이름을 찾는 함수
+ */
+private fun findActualSpeakerName(messages: List<Pair<String, String>>): String {
+    // "나"가 아닌 첫 번째 화자 이름을 찾기
+    val actualName = messages.firstOrNull { it.first != "나" && it.first != "상대방" }?.first
+    
+    // 실제 이름이 있으면 반환, 없으면 빈 문자열 반환
+    return actualName ?: ""
 }
 
 

@@ -1,5 +1,6 @@
 package com.mv.floatingbuttonapp
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,6 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -36,14 +39,31 @@ fun PermissionOverlayScreen(
     onNextClick: () -> Unit,
     onSkipClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F7FA))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
+        // 배경 이미지
+        Image(
+            painter = painterResource(id = R.drawable.mik_na_ill_be_happy2),
+            contentDescription = "권한 설정 배경",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
+        )
+        
+        // 어두운 오버레이 (가독성 향상)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+        )
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
         // 상단: 진행 상황 표시
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -93,7 +113,14 @@ fun PermissionOverlayScreen(
             Text(
                 text = "1 / 3",
                 fontSize = 14.sp,
-                color = Color.Gray
+                color = Color.White.copy(alpha = 0.8f),
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                        blurRadius = 2f
+                    )
+                )
             )
             
             Spacer(modifier = Modifier.height(40.dp))
@@ -113,8 +140,15 @@ fun PermissionOverlayScreen(
                 text = "다른 앱 위에 그리기 권한",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C3E50),
-                textAlign = TextAlign.Center
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                )
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -123,9 +157,16 @@ fun PermissionOverlayScreen(
             Text(
                 text = "플로팅 버튼을 화면에 표시하기 위해\n다른 앱 위에 그리기 권한이 필요합니다.",
                 fontSize = 16.sp,
-                color = Color.Gray,
+                color = Color.White.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center,
-                lineHeight = 24.sp
+                lineHeight = 24.sp,
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                        blurRadius = 2f
+                    )
+                )
             )
             
             Spacer(modifier = Modifier.height(32.dp))
@@ -225,6 +266,7 @@ fun PermissionOverlayScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
         }
+        }
     }
 }
 
@@ -240,14 +282,31 @@ fun PermissionAccessibilityScreen(
     onNextClick: () -> Unit,
     onSkipClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F7FA))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
+        // 배경 이미지
+        Image(
+            painter = painterResource(id = R.drawable.mik_na_ill_be_happy3),
+            contentDescription = "접근성 권한 배경",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
+        )
+        
+        // 어두운 오버레이 (가독성 향상)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+        )
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
         // 상단: 진행 상황 표시
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -297,7 +356,14 @@ fun PermissionAccessibilityScreen(
             Text(
                 text = "2 / 3",
                 fontSize = 14.sp,
-                color = Color.Gray
+                color = Color.White.copy(alpha = 0.8f),
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                        blurRadius = 2f
+                    )
+                )
             )
             
             Spacer(modifier = Modifier.height(40.dp))
@@ -317,8 +383,15 @@ fun PermissionAccessibilityScreen(
                 text = "접근성 서비스 권한",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C3E50),
-                textAlign = TextAlign.Center
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                )
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -327,9 +400,16 @@ fun PermissionAccessibilityScreen(
             Text(
                 text = "키보드 감지와 화면 캡처를 위해\n접근성 서비스 권한이 필요합니다.",
                 fontSize = 16.sp,
-                color = Color.Gray,
+                color = Color.White.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center,
-                lineHeight = 24.sp
+                lineHeight = 24.sp,
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                        blurRadius = 2f
+                    )
+                )
             )
             
             Spacer(modifier = Modifier.height(32.dp))
@@ -429,6 +509,7 @@ fun PermissionAccessibilityScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
         }
+        }
     }
 }
 
@@ -448,16 +529,33 @@ fun ServiceControlScreen(
     onOverlayPermissionClick: () -> Unit,
     onAccessibilityPermissionClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F7FA))
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp)
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
+        // 배경 이미지
+        Image(
+            painter = painterResource(id = R.drawable.mik_na_ill_be_happy4),
+            contentDescription = "사용자 페이지 배경",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
+        )
+        
+        // 어두운 오버레이 (가독성 향상)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+        )
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp)
+        ) {
         Spacer(modifier = Modifier.height(40.dp))
         
-        // 사용자 정보 카드
+        // 사용자 정보 카드 (중앙 정렬)
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -465,42 +563,49 @@ fun ServiceControlScreen(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // 로그아웃 버튼을 우상단에 배치
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    IconButton(
+                        onClick = onLogoutClick,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ExitToApp,
+                            contentDescription = "로그아웃",
+                            tint = Color.Gray
+                        )
+                    }
+                }
+                
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = null,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(64.dp),
                     tint = Color(0xFF6200EE)
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = currentUser?.nickname ?: "사용자",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2C3E50)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = currentUser?.email ?: "",
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
-                }
-                IconButton(onClick = onLogoutClick) {
-                    Icon(
-                        imageVector = Icons.Default.ExitToApp,
-                        contentDescription = "로그아웃",
-                        tint = Color.Gray
-                    )
-                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = currentUser?.nickname ?: "사용자",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2C3E50),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = currentUser?.email ?: "",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
             }
         }
         
@@ -573,7 +678,7 @@ fun ServiceControlScreen(
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6200EE)
+                    containerColor = Color(0xFFFFA5)
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = hasOverlayPermission && hasAccessibilityPermission
@@ -581,7 +686,8 @@ fun ServiceControlScreen(
                 Text(
                     text = "서비스 시작",
                     fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2C3E)
                 )
             }
         }
@@ -593,7 +699,14 @@ fun ServiceControlScreen(
             text = "권한 상태",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF2C3E50)
+            color = Color.White,
+            style = androidx.compose.ui.text.TextStyle(
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = Color.Black,
+                    offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                    blurRadius = 4f
+                )
+            )
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -689,6 +802,7 @@ fun ServiceControlScreen(
         }
         
         Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 
