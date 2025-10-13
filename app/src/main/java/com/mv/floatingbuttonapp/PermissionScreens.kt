@@ -24,6 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -39,233 +42,155 @@ fun PermissionOverlayScreen(
     onNextClick: () -> Unit,
     onSkipClick: () -> Unit
 ) {
+    // 흰색 배경
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
     ) {
-        // 배경 이미지
-        Image(
-            painter = painterResource(id = R.drawable.mik_na_ill_be_happy2),
-            contentDescription = "권한 설정 배경",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
-        )
-        
-        // 어두운 오버레이 (가독성 향상)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-        )
-        
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-        // 상단: 진행 상황 표시
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(40.dp))
-            
-            // 진행 바
-            Row(
+            // 상단: 단계 표시
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 단계 1 (현재)
+                Spacer(modifier = Modifier.height(60.dp))
+                
+                // 단계 표시 (1단계, 2단계, 3단계) - per1.png 이미지 사용
                 Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color(0xFF6200EE), shape = CircleShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(2.dp)
-                        .background(Color(0xFFDDDDDD))
-                )
-                // 단계 2
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color(0xFFDDDDDD), shape = CircleShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(2.dp)
-                        .background(Color(0xFFDDDDDD))
-                )
-                // 단계 3
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color(0xFFDDDDDD), shape = CircleShape)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "1 / 3",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.8f),
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                        blurRadius = 2f
-                    )
-                )
-            )
-            
-            Spacer(modifier = Modifier.height(40.dp))
-            
-            // 아이콘
-            Icon(
-                imageVector = Icons.Default.Visibility,
-                contentDescription = null,
-                modifier = Modifier.size(80.dp),
-                tint = Color(0xFF6200EE)
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // 제목
-            Text(
-                text = "다른 앱 위에 그리기 권한",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 4f
-                    )
-                )
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // 설명
-            Text(
-                text = "플로팅 버튼을 화면에 표시하기 위해\n다른 앱 위에 그리기 권한이 필요합니다.",
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.9f),
-                textAlign = TextAlign.Center,
-                lineHeight = 24.sp,
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                        blurRadius = 2f
-                    )
-                )
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // 권한 상태 카드
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (hasPermission) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .height(60.dp)
+                        .padding(horizontal = 40.dp)
                 ) {
-                    Icon(
-                        imageVector = if (hasPermission) Icons.Default.Check else Icons.Default.Close,
-                        contentDescription = null,
-                        tint = if (hasPermission) Color(0xFF4CAF50) else Color(0xFFF44336),
-                        modifier = Modifier.size(24.dp)
+                    // 배경 이미지
+                    Image(
+                        painter = painterResource(id = R.drawable.per1),
+                        contentDescription = "단계 표시",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = if (hasPermission) "권한이 허용되었습니다" else "권한이 필요합니다",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (hasPermission) Color(0xFF2E7D32) else Color(0xFFC62828)
-                    )
-                }
-            }
-        }
-        
-        // 하단: 버튼들
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (!hasPermission) {
-                // 권한 요청 버튼
-                Button(
-                    onClick = onRequestPermission,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6200EE)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = "권한 설정하기",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    
+                    // 텍스트 오버레이
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 1단계 (활성) - 주황색 배경에 흰색 텍스트 (왼쪽으로 이동)
+                        Text(
+                            text = "1단계",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.offset(x = (-30).dp)
+                        )
+                        
+                        // 2단계 (비활성) - 회색 배경에 회색 텍스트
+                        Text(
+                            text = "2단계",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color(0xFF666666)
+                        )
+                        
+                        // 3단계 (비활성) - 회색 배경에 회색 텍스트 (오른쪽으로 이동)
+                        Text(
+                            text = "3단계",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color(0xFF666666),
+                            modifier = Modifier.offset(x = 30.dp)
+                        )
+                    }
                 }
                 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(80.dp))
                 
-                // 건너뛰기 버튼
-                OutlinedButton(
-                    onClick = onSkipClick,
+                // 중앙 일러스트레이션 - Per1Logo.png 사용
+                Image(
+                    painter = painterResource(id = R.drawable.per1logo),
+                    contentDescription = "권한 설정 일러스트레이션",
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6200EE))
-                ) {
-                    Text(
-                        text = "나중에 하기",
-                        fontSize = 16.sp,
-                        color = Color(0xFF6200EE)
-                    )
-                }
-            } else {
-                // 다음 버튼
-                Button(
-                    onClick = onNextClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6200EE)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = "다음 단계로",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                        .size(300.dp)
+                        .padding(20.dp),
+                    contentScale = ContentScale.Fit
+                )
+                
+                Spacer(modifier = Modifier.height(60.dp))
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+            // 하단: 텍스트와 버튼
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(60.dp))
+                
+                // 제목
+                Text(
+                    text = "다른 앱 위에 그리기 권한",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333),
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 설명
+                Text(
+                    text = "플로팅 버튼을 화면에 표시하기 위해\n다른 앱 위에 그리기 권한이 필요합니다.",
+                    fontSize = 16.sp,
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 24.sp
+                )
+                
+                Spacer(modifier = Modifier.height(40.dp))
+                
+                // 다음 단계로 버튼 - UIButtons.png 사용 (가로 길이의 1/2 사이즈)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.5f) // 가로 길이의 1/2
+                            .aspectRatio(3.2f) // 원본 비율 유지
+                            .clickable { onNextClick() }
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.uibuttons),
+                            contentDescription = "다음 단계로 버튼",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit // 비율 유지
+                        )
+                        
+                        // 버튼 위에 텍스트 오버레이 - 완전 중앙 정렬
+                        Text(
+                            text = "다음 단계로",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(100.dp))
+            }
         }
     }
 }
@@ -282,24 +207,12 @@ fun PermissionAccessibilityScreen(
     onNextClick: () -> Unit,
     onSkipClick: () -> Unit
 ) {
+    // 배경 색상 (임시로 단색 배경 사용)
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFE8F5E8))
     ) {
-        // 배경 이미지
-        Image(
-            painter = painterResource(id = R.drawable.mik_na_ill_be_happy3),
-            contentDescription = "접근성 권한 배경",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
-        )
-        
-        // 어두운 오버레이 (가독성 향상)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-        )
-        
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -307,164 +220,187 @@ fun PermissionAccessibilityScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-        // 상단: 진행 상황 표시
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(40.dp))
-            
-            // 진행 바
-            Row(
+            // 상단: 진행 상황 표시
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 단계 1 (완료)
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color(0xFF6200EE), shape = CircleShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(2.dp)
-                        .background(Color(0xFF6200EE))
-                )
-                // 단계 2 (현재)
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color(0xFF6200EE), shape = CircleShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(2.dp)
-                        .background(Color(0xFFDDDDDD))
-                )
-                // 단계 3
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color(0xFFDDDDDD), shape = CircleShape)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "2 / 3",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.8f),
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                        blurRadius = 2f
-                    )
-                )
-            )
-            
-            Spacer(modifier = Modifier.height(40.dp))
-            
-            // 아이콘
-            Icon(
-                imageVector = Icons.Default.Security,
-                contentDescription = null,
-                modifier = Modifier.size(80.dp),
-                tint = Color(0xFF6200EE)
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // 제목
-            Text(
-                text = "접근성 서비스 권한",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 4f
-                    )
-                )
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // 설명
-            Text(
-                text = "키보드 감지와 화면 캡처를 위해\n접근성 서비스 권한이 필요합니다.",
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.9f),
-                textAlign = TextAlign.Center,
-                lineHeight = 24.sp,
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                        blurRadius = 2f
-                    )
-                )
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // 권한 상태 카드
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (hasPermission) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
+                Spacer(modifier = Modifier.height(40.dp))
+                
+                // 진행 바
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (hasPermission) Icons.Default.Check else Icons.Default.Close,
-                        contentDescription = null,
-                        tint = if (hasPermission) Color(0xFF4CAF50) else Color(0xFFF44336),
-                        modifier = Modifier.size(24.dp)
+                    // 단계 1 (완료)
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(Color(0xFF4CAF50), shape = CircleShape)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = if (hasPermission) "권한이 허용되었습니다" else "권한이 필요합니다",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (hasPermission) Color(0xFF2E7D32) else Color(0xFFC62828)
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(2.dp)
+                            .background(Color(0xFF4CAF50))
+                    )
+                    // 단계 2 (현재)
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(Color(0xFF6200EE), shape = CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(2.dp)
+                            .background(Color(0xFFDDDDDD))
+                    )
+                    // 단계 3
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(Color(0xFFDDDDDD), shape = CircleShape)
                     )
                 }
-            }
-        }
-        
-        // 하단: 버튼들
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (!hasPermission) {
-                // 권한 요청 버튼
-                Button(
-                    onClick = onRequestPermission,
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "2 / 3",
+                    fontSize = 14.sp,
+                    color = Color(0xFF333333)
+                )
+                
+                Spacer(modifier = Modifier.height(40.dp))
+                
+                // 아이콘
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = Color(0xFF6200EE)
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // 제목
+                Text(
+                    text = "접근성 서비스 권한",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333),
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 설명
+                Text(
+                    text = "키보드 입력을 감지하고 화면을 캡처하기 위해\n접근성 서비스 권한이 필요합니다.",
+                    fontSize = 16.sp,
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 24.sp
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                // 권한 상태 카드
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White.copy(alpha = 0.8f)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = if (hasPermission) Icons.Default.Check else Icons.Default.Close,
+                                contentDescription = "권한 상태",
+                                modifier = Modifier.size(24.dp),
+                                tint = if (hasPermission) Color(0xFF4CAF50) else Color(0xFFF44336)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = if (hasPermission) "권한 허용됨" else "권한 필요",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF333333)
+                            )
+                        }
+                        
+                        if (!hasPermission) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "권한을 허용하면 키보드 입력 감지 기능을 사용할 수 있습니다.",
+                                fontSize = 14.sp,
+                                color = Color(0xFF666666),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // 하단: 버튼들
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 권한 요청 버튼 (권한이 없을 때만 표시)
+                if (!hasPermission) {
+                    Button(
+                        onClick = onRequestPermission,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF6200EE)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "권한 설정하기",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                // 다음 단계로 버튼
+                Button(
+                    onClick = onNextClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .padding(horizontal = 16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6200EE)
+                        containerColor = if (hasPermission) Color(0xFF4CAF50) else Color(0xFF6200EE)
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = "권한 설정하기",
+                        text = if (hasPermission) "다음 단계로" else "건너뛰기",
+                        color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -472,50 +408,27 @@ fun PermissionAccessibilityScreen(
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // 건너뛰기 버튼
-                OutlinedButton(
-                    onClick = onSkipClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6200EE))
-                ) {
-                    Text(
-                        text = "나중에 하기",
-                        fontSize = 16.sp,
-                        color = Color(0xFF6200EE)
-                    )
-                }
-            } else {
-                // 다음 버튼
-                Button(
-                    onClick = onNextClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6200EE)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = "완료하기",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                // 건너뛰기 버튼 (권한이 있을 때만 표시)
+                if (hasPermission) {
+                    TextButton(
+                        onClick = onSkipClick,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "건너뛰기",
+                            color = Color(0xFF666666),
+                            fontSize = 16.sp
+                        )
+                    }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-        }
         }
     }
 }
 
 /**
- * 서비스 실행 화면
- * 모든 권한 설정 후 서비스를 시작/중지하는 화면
+ * 서비스 제어 화면
+ * 사용자가 서비스를 시작/중지할 수 있는 메인 화면
  */
 @Composable
 fun ServiceControlScreen(
@@ -529,280 +442,256 @@ fun ServiceControlScreen(
     onOverlayPermissionClick: () -> Unit,
     onAccessibilityPermissionClick: () -> Unit
 ) {
+    // 배경 색상 (임시로 단색 배경 사용)
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFE3F2FD))
     ) {
-        // 배경 이미지
-        Image(
-            painter = painterResource(id = R.drawable.mik_na_ill_be_happy4),
-            contentDescription = "사용자 페이지 배경",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
-        )
-        
-        // 어두운 오버레이 (가독성 향상)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.4f))
-        )
-        
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-        Spacer(modifier = Modifier.height(40.dp))
-        
-        // 사용자 정보 카드 (중앙 정렬)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // 로그아웃 버튼을 우상단에 배치
-                Box(
-                    modifier = Modifier.fillMaxWidth()
+            // 사용자 정보 표시 (중앙 정렬)
+            if (currentUser != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
                 ) {
-                    IconButton(
-                        onClick = onLogoutClick,
-                        modifier = Modifier.align(Alignment.TopEnd)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ExitToApp,
-                            contentDescription = "로그아웃",
-                            tint = Color.Gray
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "사용자",
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "안녕하세요!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = currentUser.nickname ?: "사용자",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
-                
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = Color(0xFF6200EE)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = currentUser?.nickname ?: "사용자",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2C3E50),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = currentUser?.email ?: "",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
-                )
             }
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // 서비스 상태 카드
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isServiceRunning) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
-            Column(
+
+            // 권한 설정 섹션
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             ) {
-                Icon(
-                    imageVector = if (isServiceRunning) Icons.Default.Check else Icons.Default.Close,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = if (isServiceRunning) Color(0xFF4CAF50) else Color(0xFFF44336)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (isServiceRunning) "서비스 실행 중" else "서비스 중지됨",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = if (isServiceRunning) 
-                        "플로팅 버튼이 활성화되어 있습니다" 
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "권한 상태",
+                        style = TextStyle(
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            shadow = Shadow(
+                                color = Color.Black,
+                                offset = Offset(1f, 1f),
+                                blurRadius = 2f
+                            )
+                        ),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    // 오버레이 권한
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (hasOverlayPermission) Icons.Default.Check else Icons.Default.Close,
+                            contentDescription = "오버레이 권한",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (hasOverlayPermission) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "다른 앱 위에 그리기",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (!hasOverlayPermission) {
+                            Button(
+                                onClick = onOverlayPermissionClick,
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text(
+                                    text = "설정",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    
+                    // 접근성 권한
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (hasAccessibilityPermission) Icons.Default.Check else Icons.Default.Close,
+                            contentDescription = "접근성 권한",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (hasAccessibilityPermission) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "접근성 서비스",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (!hasAccessibilityPermission) {
+                            Button(
+                                onClick = onAccessibilityPermissionClick,
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text(
+                                    text = "설정",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 서비스 상태 표시
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isServiceRunning) 
+                        MaterialTheme.colorScheme.primaryContainer 
                     else 
-                        "서비스를 시작하려면 아래 버튼을 누르세요",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
+                        MaterialTheme.colorScheme.surfaceVariant
                 )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // 서비스 제어 버튼
-        if (isServiceRunning) {
-            Button(
-                onClick = onStopServiceClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFF44336)
-                ),
-                shape = RoundedCornerShape(12.dp)
             ) {
-                Text(
-                    text = "서비스 중지",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        } else {
-            Button(
-                onClick = onStartServiceClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFA5)
-                ),
-                shape = RoundedCornerShape(12.dp),
-                enabled = hasOverlayPermission && hasAccessibilityPermission
-            ) {
-                Text(
-                    text = "서비스 시작",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2C3E)
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // 권한 상태 섹션
-        Text(
-            text = "권한 상태",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            style = androidx.compose.ui.text.TextStyle(
-                shadow = androidx.compose.ui.graphics.Shadow(
-                    color = Color.Black,
-                    offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                    blurRadius = 4f
-                )
-            )
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // 오버레이 권한 카드
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !hasOverlayPermission) { onOverlayPermissionClick() },
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Visibility,
-                    contentDescription = null,
-                    tint = if (hasOverlayPermission) Color(0xFF4CAF50) else Color.Gray,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "다른 앱 위에 그리기",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF2C3E50)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isServiceRunning) Icons.Default.Check else Icons.Default.Close,
+                        contentDescription = "서비스 상태",
+                        modifier = Modifier.size(24.dp),
+                        tint = if (isServiceRunning) 
+                            MaterialTheme.colorScheme.primary 
+                        else 
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = if (hasOverlayPermission) "허용됨" else "권한 필요",
-                        fontSize = 14.sp,
-                        color = Color.Gray
+                        text = if (isServiceRunning) "서비스 실행 중" else "서비스 중지됨",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isServiceRunning) 
+                            MaterialTheme.colorScheme.onPrimaryContainer 
+                        else 
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    imageVector = if (hasOverlayPermission) Icons.Default.Check else Icons.Default.Close,
-                    contentDescription = null,
-                    tint = if (hasOverlayPermission) Color(0xFF4CAF50) else Color(0xFFF44336)
-                )
             }
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // 접근성 권한 카드
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !hasAccessibilityPermission) { onAccessibilityPermissionClick() },
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = if (hasAccessibilityPermission) Color(0xFF4CAF50) else Color.Gray,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "접근성 서비스",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF2C3E50)
+
+            // 서비스 제어 버튼들
+            if (isServiceRunning) {
+                Button(
+                    onClick = onStopServiceClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
                     )
+                ) {
                     Text(
-                        text = if (hasAccessibilityPermission) "허용됨" else "권한 필요",
-                        fontSize = 14.sp,
-                        color = Color.Gray
+                        text = "서비스 중지",
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
+            } else {
+                Button(
+                    onClick = onStartServiceClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFA500)
+                    )
+                ) {
+                    Text(
+                        text = "서비스 시작",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF2C3E50)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 로그아웃 버튼
+            OutlinedButton(
+                onClick = onLogoutClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
                 Icon(
-                    imageVector = if (hasAccessibilityPermission) Icons.Default.Check else Icons.Default.Close,
-                    contentDescription = null,
-                    tint = if (hasAccessibilityPermission) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    imageVector = Icons.Default.ExitToApp,
+                    contentDescription = "로그아웃",
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "로그아웃",
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
-

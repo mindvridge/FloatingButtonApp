@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -43,6 +44,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -421,19 +425,24 @@ class MainActivity : ComponentActivity() {
         try {
             // 테스트용 임시 사용자 정보로 로그인
             isLoggedIn = true
-            currentUser = UserInfo(
+            currentUser = com.mv.floatingbuttonapp.UserInfo(
                 userId = "test_user_001",
                 nickname = "테스트 사용자",
                 profileImageUrl = null,
                 email = "test@example.com"
             )
+            
+            // 게스트 로그인 시 권한 상태 초기화 (강제로 권한 설정 화면으로 이동)
+            hasOverlayPermission = false
+            hasAccessibilityPermission = false
+            
             // 로그인 성공 후 첫 번째 권한 화면으로 이동
             currentScreen = AppScreen.PERMISSION_OVERLAY
-            Toast.makeText(this, "테스트 로그인 성공: ${currentUser?.nickname}", Toast.LENGTH_SHORT).show()
-            Log.d("MainActivity", "테스트 로그인 성공: ${currentUser?.nickname}")
+            Toast.makeText(this, "게스트 로그인: ${currentUser?.nickname}", Toast.LENGTH_SHORT).show()
+            Log.d("MainActivity", "게스트 로그인: ${currentUser?.nickname}, 권한 화면으로 이동")
         } catch (e: Exception) {
-            Toast.makeText(this, "테스트 로그인 오류: ${e.message}", Toast.LENGTH_SHORT).show()
-            Log.e("MainActivity", "테스트 로그인 오류", e)
+            Toast.makeText(this, "게스트 로그인 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+            Log.e("MainActivity", "게스트 로그인 오류", e)
         }
     }
 
@@ -845,24 +854,12 @@ fun LoginScreen(
         color = MaterialTheme.colorScheme.background
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White),
             contentAlignment = Alignment.Center
         ) {
-            // 배경 이미지
-            Image(
-                painter = painterResource(id = R.drawable.mik_na_ill_be_happy),
-                contentDescription = "로그인 배경",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop // 이미지 비율 유지하면서 화면 꽉 채움
-            )
-            
-            // 어두운 오버레이 (가독성 향상)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.6f))
-            )
-            // 중앙 콘텐츠 영역 (아이콘, 텍스트, 로그인 버튼)
+            // 중앙 콘텐츠 영역 (타이틀 이미지, 로그인 버튼)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -870,212 +867,112 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // 앱 로고/아이콘 영역
+                // 타이틀 이미지 영역
                 Image(
-                    painter = painterResource(id = R.drawable.mik_na_app_icon),
+                    painter = painterResource(id = R.drawable.blue_and_white_illustration_mail_logo),
                     contentDescription = "앱 로고",
                     modifier = Modifier
-                        .size(360.dp)
-                        .padding(bottom = 32.dp),
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 48.dp),
                     contentScale = ContentScale.Fit
                 )
                 
-                // 앱 제목
-                Text(
-                    text = "이렇게 보내면 어때",
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        shadow = androidx.compose.ui.graphics.Shadow(
-                            color = Color.Black,
-                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                            blurRadius = 4f
-                        )
-                    ),
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Spacer(modifier = Modifier.height(32.dp))
                 
-                // 앱 설명
-                Text(
-                    text = "스마트한 텍스트 인식과 AI 답변 추천을 위한\n플로팅 버튼 서비스입니다",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        shadow = androidx.compose.ui.graphics.Shadow(
-                            color = Color.Black,
-                            offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                            blurRadius = 2f
-                        )
-                    ),
-                    textAlign = TextAlign.Center,
-                    color = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.padding(bottom = 48.dp)
-                )
-                
-                // 구분선
-                Row(
+                // 카카오 로그인 버튼
+                Button(
+                    onClick = onKakaoLoginClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent
+                    ),
+                    contentPadding = PaddingValues(0.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    HorizontalDivider(
-                        modifier = Modifier.weight(1f),
-                        color = Color.White.copy(alpha = 0.5f)
+                    Image(
+                        painter = painterResource(id = R.drawable.kakao_login_large_wide),
+                        contentDescription = "카카오 로그인",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        contentScale = ContentScale.FillBounds
                     )
                 }
                 
-                // 카카오 로그인 버튼 (이미지 사용)
-                Image(
-                    painter = painterResource(id = R.drawable.kakao_login_large_wide),
-                    contentDescription = "카카오 로그인",
-                    contentScale = ContentScale.FillWidth, // 가로를 채우고 비율 유지
-                    modifier = Modifier
-                        .fillMaxWidth() // 화면 가로에 맞춤
-                        .clip(RoundedCornerShape(8.dp)) // 이미지 모서리를 둥글게
-                        .clickable(onClick = onKakaoLoginClick) // 클릭 이벤트 추가
-                )
-                
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // 구글 로그인 버튼
-                Card(
-                    onClick = onGoogleLoginClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .alpha(0f), // 투명하게 만들어서 숨김
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White
-                    ),
-                    shape = MaterialTheme.shapes.medium,
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        // 구글 아이콘 (G 로고)
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "G",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Color(0xFF4285F4),
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(12.dp))
-                        
-                        Text(
-                            text = "구글 계정으로 로그인",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFF333333),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(16.dp))
                 
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // 테스트 로그인 버튼 (개발/테스트용)
-                Card(
+                // 게스트 로그인 버튼 (개발/테스트용)
+                Button(
                     onClick = onTestLoginClick,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF9C27B0) // 보라색으로 테스트 버튼임을 표시
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White
                     ),
-                    shape = MaterialTheme.shapes.medium,
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFFFA500) // 주황색 테두리
+                    )
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        // 테스트 아이콘 (T 로고)
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "T",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Color.White,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(12.dp))
-                        
-                        Text(
-                            text = "테스트 로그인 (개발용)",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    Text(
+                        text = "게스트 로그인",
+                        color = Color(0xFF2C3E50),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             
             // 하단 링크 영역 (디바이스 하단에 고정)
             Column(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // 구분선
+                HorizontalDivider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    color = Color(0xFFE0E0E0),
+                    thickness = 1.dp
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 // 이용약관 및 개인정보처리방침 링크
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "이용약관",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            shadow = androidx.compose.ui.graphics.Shadow(
-                                color = Color.Black,
-                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                blurRadius = 2f
-                            )
-                        ),
-                        color = Color.White,
-                        modifier = Modifier.clickable { showTerms = true }
-                    )
-                    Text(
-                        text = " 및 ",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            shadow = androidx.compose.ui.graphics.Shadow(
-                                color = Color.Black,
-                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                blurRadius = 2f
-                            )
-                        ),
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                    Text(
-                        text = "개인정보처리방침",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            shadow = androidx.compose.ui.graphics.Shadow(
-                                color = Color.Black,
-                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                blurRadius = 2f
-                            )
-                        ),
-                        color = Color.White,
-                        modifier = Modifier.clickable { showPrivacy = true }
-                    )
-                }
+                Text(
+                    text = "이용약관 및 개인정보처리방침",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showTerms = true }
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // 저작권 정보
+                Text(
+                    text = "Copyright © 2025 (주)마인드브이알 | 마브 All rights reserved.",
+                    fontSize = 10.sp,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                )
             }
         }
         

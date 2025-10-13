@@ -84,7 +84,8 @@ data class ChatAnalysis(
     val timeInfo: String?,             // 시간 정보
     val messageType: MessageType,      // 메시지 타입
     val isGroupChat: Boolean,          // 그룹 채팅 여부
-    val participants: List<String>     // 참여자 목록
+    val participants: List<String>,    // 참여자 목록
+    val otherPersonName: String?       // 상대방 이름
 )
 
 /**
@@ -163,6 +164,21 @@ enum class EntityType {
     HASHTAG,           // 해시태그
     MENTION            // 멘션
 }
+
+/**
+ * 텍스트 라인 데이터 클래스
+ * OCR 결과에서 추출된 각 텍스트 라인의 정보를 저장
+ */
+data class TextLine(
+    val text: String,
+    val y: Int,
+    val left: Int,
+    val right: Int,
+    val center: Int,
+    val isName: Boolean,  // 이름인지 여부
+    val fontSize: Float,  // 폰트 크기 (높이 기준)
+    val height: Int       // 텍스트 높이
+)
 
 /**
  * 플로팅 버튼 서비스 클래스
@@ -907,14 +923,19 @@ class FloatingButtonService :
     
     /**
      * 화면 캡처 결과 처리
+     * 상태바 영역을 제외한 부분만 OCR 수행
      */
     private fun processScreenshot(bitmap: Bitmap) {
         Log.d(TAG, "processScreenshot 호출됨: ${bitmap.width}x${bitmap.height}")
         
         try {
-            // InputImage 생성
+            // 상태바 영역을 제외한 Bitmap 생성
+            val croppedBitmap = cropStatusBarFromBitmap(bitmap)
+            Log.d(TAG, "상태바 제외 후 크기: ${croppedBitmap.width}x${croppedBitmap.height}")
+            
+            // InputImage 생성 (크롭된 Bitmap 사용)
             Log.d(TAG, "InputImage 생성 중...")
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
+            val inputImage = InputImage.fromBitmap(croppedBitmap, 0)
             Log.d(TAG, "InputImage 생성 완료")
             
             // OCR 수행
@@ -930,20 +951,53 @@ class FloatingButtonService :
                     
                     if (ocrAnalysis.originalText.isNotEmpty()) {
                         Log.d(TAG, "OCR 결과를 BottomSheet로 표시")
+                        
+                        // 디버깅: 처리 결과 확인 토스트
+                        val lines = ocrAnalysis.originalText.lines().filter { it.isNotBlank() }
+                        val senderLabels = lines.filter { it.startsWith("[") && it.contains("]") }
+                        val myMessages = senderLabels.count { it.startsWith("[나]") }
+                        val otherMessages = senderLabels.size - myMessages
+                        val debugMsg = "총 ${senderLabels.size}명 (나: $myMessages, 상대: $otherMessages)"
+                        Toast.makeText(this, debugMsg, Toast.LENGTH_SHORT).show()
+                        Log.d(TAG, "OCR 결과 요약: $debugMsg")
+                        Log.d(TAG, "발신자 레이블: $senderLabels")
+                        Log.d(TAG, "전체 텍스트:\n${ocrAnalysis.originalText}")
+                        
                         // 분석된 OCR 결과를 BottomSheet로 표시
                         showOcrBottomSheet(ocrAnalysis)
                     } else {
                         Log.d(TAG, "추출된 텍스트가 없습니다")
                         showPermissionRequestToast("텍스트를 찾을 수 없습니다.")
                     }
+                    
+                    // 원본 및 크롭된 Bitmap 메모리 해제
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                    if (!croppedBitmap.isRecycled) {
+                        croppedBitmap.recycle()
+                    }
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "OCR 처리 실패", e)
                     showPermissionRequestToast("텍스트 인식에 실패했습니다.")
+                    
+                    // Bitmap 메모리 해제
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                    if (!croppedBitmap.isRecycled) {
+                        croppedBitmap.recycle()
+                    }
                 }
         } catch (e: Exception) {
             Log.e(TAG, "화면 캡처 결과 처리 중 오류", e)
             showPermissionRequestToast("화면 캡처 처리 중 오류가 발생했습니다.")
+            
+            // Bitmap 메모리 해제
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
         } finally {
             // 플로팅 버튼 다시 표시
             Log.d(TAG, "플로팅 버튼 다시 표시 예약")
@@ -951,6 +1005,45 @@ class FloatingButtonService :
                 floatingView?.visibility = View.VISIBLE
                 Log.d(TAG, "플로팅 버튼 다시 표시됨")
             }, 500)
+        }
+    }
+    
+    /**
+     * Bitmap에서 상태바 영역을 제외한 부분만 크롭
+     * 상태바(wifi, 배터리, 시간 등)가 OCR 인식되는 것을 방지
+     */
+    private fun cropStatusBarFromBitmap(originalBitmap: Bitmap): Bitmap {
+        return try {
+            // 상태바 높이 가져오기
+            val statusBarHeight = getStatusBarHeight()
+            Log.d(TAG, "상태바 높이: $statusBarHeight px")
+            
+            // 상태바 영역을 제외한 나머지 영역만 크롭
+            val croppedHeight = originalBitmap.height - statusBarHeight
+            
+            // 크롭할 영역이 유효한지 확인
+            if (croppedHeight <= 0 || statusBarHeight >= originalBitmap.height) {
+                Log.w(TAG, "상태바 높이가 비정상적이거나 화면 높이를 초과함, 원본 Bitmap 사용")
+                return originalBitmap
+            }
+            
+            // Bitmap 크롭 (x=0, y=statusBarHeight부터 시작, 전체 너비, 상태바 제외 높이)
+            val croppedBitmap = Bitmap.createBitmap(
+                originalBitmap,
+                0,                          // x 시작점
+                statusBarHeight,            // y 시작점 (상태바 높이만큼 아래부터)
+                originalBitmap.width,       // 너비 (전체)
+                croppedHeight               // 높이 (상태바 제외)
+            )
+            
+            Log.d(TAG, "🔪 Bitmap 크롭 완료: 원본=${originalBitmap.width}x${originalBitmap.height}, " +
+                    "크롭=${croppedBitmap.width}x${croppedBitmap.height}, " +
+                    "제외된 높이=$statusBarHeight")
+            
+            croppedBitmap
+        } catch (e: Exception) {
+            Log.e(TAG, "Bitmap 크롭 중 오류 발생, 원본 Bitmap 사용", e)
+            originalBitmap
         }
     }
     
@@ -977,21 +1070,14 @@ class FloatingButtonService :
         val keywords = extractKeywords(originalText)
         Log.d(TAG, "추출된 키워드: $keywords")
         
-        // 채팅 메시지 형식으로 정리 (텍스트가 메시지 타입인 경우)
-        val formattedText = if (textType == TextType.MESSAGE || textType == TextType.QUESTION) {
-            formatChatMessages(visionText)
-        } else {
-            originalText
-        }
-        Log.d(TAG, "정리된 텍스트: $formattedText")
+        // 채팅 메시지 형식으로 정리 (항상 시도)
+        // 이유: 텍스트 타입 분류가 부정확할 수 있으므로 항상 메시지 포맷팅 시도
+        val formattedText = formatChatMessages(visionText)
+        Log.d(TAG, "정리된 텍스트 (길이=${formattedText.length}): ${formattedText.take(100)}...")
         
-        // 채팅 분석 (텍스트가 메시지 타입인 경우)
-        val chatAnalysis = if (textType == TextType.MESSAGE) {
-            analyzeChatMessage(visionText, originalText)
-        } else {
-            null
-        }
-        Log.d(TAG, "채팅 분석: ${chatAnalysis?.sender}")
+        // 채팅 분석 (항상 수행하여 상대방 이름 추출)
+        val chatAnalysis = analyzeChatMessage(visionText, originalText)
+        Log.d(TAG, "채팅 분석 완료 - 발신자: ${chatAnalysis.sender}, 상대방 이름: ${chatAnalysis.otherPersonName}")
         
         // 추천 답변 생성 (채팅 분석 결과 반영)
         val suggestions = generateSmartSuggestions(formattedText, textType, chatAnalysis)
@@ -1015,90 +1101,229 @@ class FloatingButtonService :
     
     /**
      * 채팅 메시지를 위치 기반으로 상대방/나로 구분하여 정리
-     * 개선: 라인 단위로 분석하여 더 정확한 발신자 판단
+     * 개선: 말풍선 위의 이름 블록과 말풍선을 별도로 인식
      */
     private fun formatChatMessages(visionText: Text): String {
-        Log.d(TAG, "=== 채팅 메시지 형식 정리 시작 ===")
+        Log.d(TAG, "=== 채팅 메시지 형식 정리 시작 (말풍선 기준) ===")
         
         val screenWidth = resources.displayMetrics.widthPixels
         val screenCenter = screenWidth / 2
-        val messages = mutableListOf<Triple<Int, String, String>>() // (Y좌표, 발신자, 메시지)
+        val screenHeight = resources.displayMetrics.heightPixels
+        val statusBarHeight = getStatusBarHeight()
         
-        Log.d(TAG, "화면 정보: 너비=$screenWidth, 중앙=$screenCenter")
+        Log.d(TAG, "화면 정보: 너비=$screenWidth, 중앙=$screenCenter, 높이=$screenHeight, 상태바=$statusBarHeight")
         
-        // 각 텍스트 블록의 라인 단위로 분석
+        // TextBlock을 분석하여 이름 블록과 메시지 블록으로 분류
+        data class BlockInfo(
+            val block: Text.TextBlock,
+            val y: Int,
+            val centerX: Int,
+            val text: String,
+            val isLeftSide: Boolean,
+            val isSmallFont: Boolean // 작은 폰트인지 (이름일 가능성)
+        )
+        
+        val allBlocks = mutableListOf<BlockInfo>()
+        
+        // 모든 블록 수집 및 분류
         for (block in visionText.textBlocks) {
-            for (line in block.lines) {
-                val lineText = line.text.trim()
-                
-                // 불필요한 텍스트 필터링
-                if (shouldSkipText(lineText)) {
-                    Log.d(TAG, "텍스트 스킵: $lineText")
+            val blockBoundingBox = block.boundingBox ?: continue
+            val blockY = blockBoundingBox.top
+            val blockCenterX = (blockBoundingBox.left + blockBoundingBox.right) / 2
+            val blockHeight = blockBoundingBox.height()
+            
+            // 상태바 영역 제외
+            if (blockY < statusBarHeight) {
+                Log.d(TAG, "🚫 상태바 영역 블록 제외 (Y=$blockY)")
                     continue
                 }
                 
-                // 라인의 위치 정보 가져오기
-                val boundingBox = line.boundingBox
-                if (boundingBox == null) {
-                    Log.d(TAG, "boundingBox가 null: $lineText")
+            val blockText = block.lines.joinToString("\n") { it.text.trim() }
+            
+            // 빈 블록 제외 (공백, 빈 문자열)
+            if (blockText.trim().isEmpty()) {
+                Log.d(TAG, "🚫 빈 블록 제외 (Y=$blockY)")
                     continue
                 }
                 
-                // 라인의 왼쪽 끝과 오른쪽 끝 좌표
-                val lineLeft = boundingBox.left
-                val lineRight = boundingBox.right
-                val lineCenter = (lineLeft + lineRight) / 2
-                val lineY = boundingBox.top // Y 좌표 (위에서부터)
+            // 시간이나 UI 요소 블록 제외
+            if (shouldSkipText(blockText)) {
+                Log.d(TAG, "블록 스킵: $blockText")
+                continue
+            }
+            
+            val isLeftSide = blockCenterX < screenCenter
+            
+            // 작은 폰트 블록인지 확인 (평균 라인 높이 기준)
+            val avgLineHeight = block.lines.mapNotNull { it.boundingBox?.height() }.average()
+            val isSmallFont = avgLineHeight < 40 // 40px 미만은 작은 폰트
+            
+            // 블록의 실제 텍스트 길이 확인 (공백 제거 후)
+            val cleanTextLength = blockText.replace("\\s".toRegex(), "").length
+            if (cleanTextLength == 0) {
+                Log.d(TAG, "🚫 내용 없는 블록 제외 (공백만): '$blockText'")
+                continue
+            }
+            
+            // 블록 크기가 너무 작은 경우 제외 (아이콘, 점 등)
+            val blockWidth = blockBoundingBox.width()
+            if (blockWidth < 20 || blockHeight < 10) {
+                Log.d(TAG, "🚫 너무 작은 블록 제외: '$blockText' (${blockWidth}x${blockHeight})")
+                continue
+            }
+            
+            // 텍스트 길이가 너무 짧은 경우 추가 검증
+            if (cleanTextLength < 2) {
+                // 1글자는 의미있는 한글만 허용
+                if (!blockText.matches(Regex("^[가-힣ㅋㅎㅠㅜ]$"))) {
+                    Log.d(TAG, "🚫 1글자 무의미 블록 제외: '$blockText'")
+                    continue
+                }
+            }
+            
+            allBlocks.add(BlockInfo(block, blockY, blockCenterX, blockText, isLeftSide, isSmallFont))
+            
+            val position = if (isLeftSide) "왼쪽" else "오른쪽"
+            val fontType = if (isSmallFont) "작은폰트" else "큰폰트"
+            Log.d(TAG, "📦 블록: '${blockText.take(20)}...' | 위치=$position | Y=$blockY | 높이=$avgLineHeight | $fontType")
+        }
+        
+        // Y 좌표 순으로 정렬
+        allBlocks.sortBy { it.y }
+        
+        // 이름 블록과 메시지 블록 매칭
+        data class MessageBubble(
+            val text: String,
+            val y: Int,
+            val senderName: String
+        )
+        
+        val bubbles = mutableListOf<MessageBubble>()
+        var lastLeftSenderName: String? = null
+        
+        // 화면 상단 채팅방 제목에서 이름 추출 (백업용)
+        val chatRoomName = extractOtherPersonName(visionText)
+        if (chatRoomName != null) {
+            Log.d(TAG, "📌 채팅방 제목에서 이름 발견: $chatRoomName")
+            lastLeftSenderName = chatRoomName // 기본 이름으로 설정
+        }
+        
+        var i = 0
+        while (i < allBlocks.size) {
+            val currentBlock = allBlocks[i]
+            
+            if (!currentBlock.isLeftSide) {
+                // 오른쪽 블록 = 내 메시지
+                bubbles.add(MessageBubble(currentBlock.text, currentBlock.y, "나"))
+                Log.d(TAG, "💬 오른쪽 말풍선: [나] ${currentBlock.text.take(30)}...")
+                i++
                 
-                // 왼쪽/오른쪽 판단
-                // 왼쪽에 있으면 상대방, 오른쪽에 있으면 나
-                val sender = if (lineCenter < screenCenter) {
-                    "상대방" // 왼쪽
+            } else {
+                // 왼쪽 블록 처리
+                // 작은 폰트 + 이름 패턴 + 다음 블록이 왼쪽 = 이름 블록
+                if (currentBlock.isSmallFont && 
+                    isValidNamePattern(currentBlock.text) &&
+                    i + 1 < allBlocks.size) {
+                    
+                    val nextBlock = allBlocks[i + 1]
+                    val yDiff = nextBlock.y - currentBlock.y
+                    
+                    // 다음 블록이 왼쪽이고 가까우면 이름+메시지 조합
+                    if (nextBlock.isLeftSide && yDiff < 100) {
+                        // 현재 블록 = 이름, 다음 블록 = 메시지
+                        val senderName = currentBlock.text
+                        lastLeftSenderName = senderName
+                        
+                        bubbles.add(MessageBubble(nextBlock.text, nextBlock.y, senderName))
+                        Log.d(TAG, "💬 왼쪽 이름+말풍선: [$senderName] ${nextBlock.text.take(30)}... (Y차이=$yDiff)")
+                        
+                        i += 2 // 이름 블록과 메시지 블록 둘 다 처리
+                        continue
+                    }
+                }
+                
+                // 이름 블록이 아니거나 다음 블록이 없으면 일반 메시지
+                if (lastLeftSenderName != null) {
+                    // 이전에 발견된 이름 또는 채팅방 제목 사용
+                    bubbles.add(MessageBubble(currentBlock.text, currentBlock.y, lastLeftSenderName))
+                    Log.d(TAG, "💬 왼쪽 말풍선 (이전 이름 사용): [$lastLeftSenderName] ${currentBlock.text.take(30)}...")
                 } else {
-                    "나"     // 오른쪽
+                    // 이름을 찾지 못한 경우 - 메시지만 표시 (발신자 표시 안함)
+                    Log.d(TAG, "⚠️ 왼쪽 말풍선이지만 이름 없음, 메시지만 추가: ${currentBlock.text.take(30)}...")
+                    // 이름 없이 메시지만 추가하지 않음 (혼란 방지)
+                    // 또는 화면 상단 채팅방 제목을 추출하여 사용
                 }
-                
-                val leftPercent = (lineLeft.toFloat() / screenWidth * 100).toInt()
-                val rightPercent = (lineRight.toFloat() / screenWidth * 100).toInt()
-                val centerPercent = (lineCenter.toFloat() / screenWidth * 100).toInt()
-                
-                Log.d(TAG, "[$sender] $lineText")
-                Log.d(TAG, "  위치: 왼쪽=$leftPercent%, 중앙=$centerPercent%, 오른쪽=$rightPercent% (Y=$lineY)")
-                
-                messages.add(Triple(lineY, sender, lineText))
+                i++
             }
         }
         
-        // Y 좌표 기준으로 정렬 (위에서 아래로)
-        messages.sortBy { it.first }
+        // Y좌표 순으로 정렬
+        bubbles.sortBy { it.y }
         
-        Log.d(TAG, "=== 정렬 후 메시지 목록 ===")
-        messages.forEachIndexed { index, (y, sender, text) ->
-            Log.d(TAG, "$index. [Y=$y] [$sender] $text")
+        Log.d(TAG, "=== 말풍선 정렬 후 (총 ${bubbles.size}개) ===")
+        bubbles.forEachIndexed { index, bubble ->
+            Log.d(TAG, "$index. [Y=${bubble.y}] [${bubble.senderName}] ${bubble.text.take(30)}...")
         }
         
-        // 연속된 같은 발신자의 메시지 병합 (줄바꿈으로 구분)
+        // 연속된 같은 발신자의 메시지 병합
+        Log.d(TAG, "=== 메시지 병합 시작 ===")
         val mergedMessages = mutableListOf<Pair<String, String>>()
         var currentSender = ""
         var currentMessage = ""
         
-        for ((_, sender, message) in messages) {
-            if (sender == currentSender) {
+        for (bubble in bubbles) {
+            val trimmedSender = bubble.senderName.trim()
+            val trimmedMessage = bubble.text.trim()
+            
+            Log.d(TAG, "처리 중: sender='$trimmedSender', message='$trimmedMessage'")
+            
+            // 빈 발신자나 빈 메시지 스킵
+            if (trimmedSender.isEmpty() || trimmedMessage.isEmpty()) {
+                Log.d(TAG, "  → ❌ 빈 발신자/메시지 스킵")
+                continue
+            }
+            
+            // 의미없는 패턴 제외
+            val meaninglessPatterns = listOf(
+                "나", "상대방", "나상대방", "상대방나",
+                "나나", "상대방상대방"
+            )
+            if (meaninglessPatterns.contains(trimmedMessage)) {
+                Log.d(TAG, "  → ❌ 의미없는 메시지 스킵: '$trimmedMessage'")
+                continue
+            }
+            
+            // 발신자와 메시지가 동일한 경우 제외
+            if (trimmedSender == trimmedMessage) {
+                Log.d(TAG, "  → ❌ 발신자=메시지 스킵: [$trimmedSender]")
+                continue
+            }
+            
+            if (trimmedSender == currentSender) {
                 // 같은 발신자면 줄바꿈으로 메시지 병합
-                currentMessage += "\n$message"
+                currentMessage += "\n$trimmedMessage"
+                Log.d(TAG, "  → ✓ 같은 발신자, 병합")
             } else {
                 // 다른 발신자면 이전 메시지 저장
                 if (currentSender.isNotEmpty() && currentMessage.isNotEmpty()) {
                     mergedMessages.add(Pair(currentSender, currentMessage.trim()))
+                    Log.d(TAG, "  → ✓ 이전 메시지 저장: [$currentSender]")
                 }
-                currentSender = sender
-                currentMessage = message
+                currentSender = trimmedSender
+                currentMessage = trimmedMessage
+                Log.d(TAG, "  → 새 발신자: '$trimmedSender'")
             }
         }
         
         // 마지막 메시지 저장
         if (currentSender.isNotEmpty() && currentMessage.isNotEmpty()) {
             mergedMessages.add(Pair(currentSender, currentMessage.trim()))
+            Log.d(TAG, "✓ 마지막 메시지 저장: [$currentSender]")
+        }
+        
+        Log.d(TAG, "=== 병합된 메시지 목록 (총 ${mergedMessages.size}개) ===")
+        mergedMessages.forEachIndexed { index, (sender, message) ->
+            Log.d(TAG, "#$index: [$sender] ${message.take(50)}...")
         }
         
         // 형식화된 문자열로 변환
@@ -1107,29 +1332,268 @@ class FloatingButtonService :
         }
         
         Log.d(TAG, "=== 채팅 메시지 정리 완료 ===")
-        Log.d(TAG, formattedText)
-        return formattedText.ifEmpty { visionText.text }
+        Log.d(TAG, "최종 결과:\n$formattedText")
+        
+        if (formattedText.isEmpty()) {
+            Log.w(TAG, "형식화된 텍스트가 비어있음!")
+            Log.w(TAG, "원본 텍스트 길이: ${visionText.text.length}")
+            
+            // 원본 텍스트도 간단하게 포맷팅 시도
+            if (visionText.text.isNotEmpty()) {
+                Log.w(TAG, "원본 텍스트를 간단히 포맷팅하여 반환")
+                return "[텍스트]\n${visionText.text}"
+            }
+            
+            return visionText.text
+        }
+        
+        return formattedText
     }
     
     /**
-     * 텍스트를 건너뛸지 판단 (시간, URL, UI 요소 등)
+     * 유효한 이름 패턴인지 확인
+     * 말풍선 첫 번째 라인에서만 사용 (매우 엄격한 기준)
      */
-    private fun shouldSkipText(text: String): Boolean {
-        if (text.length < 2) return true
+    private fun isValidNamePattern(text: String): Boolean {
+        // 길이 제한: 2-4글자 (이름은 보통 2-4글자)
+        if (text.length < 2 || text.length > 4) return false
         
-        // 시간 패턴
-        if (text.matches(Regex("(오전|오후)?\\s*\\d{1,2}:\\d{2}"))) return true
-        if (text.matches(Regex("\\d{1,2}시\\s*\\d{1,2}분"))) return true
+        // 숫자, 특수문자 제외
+        if (text.contains(Regex("\\d"))) return false
+        if (text.contains(Regex("[!@#$%^&*()_+=\\[\\]{}|;:'\",.<>?/~`]"))) return false
         
-        // 숫자만
-        if (text.matches(Regex("^[\\d\\s]+$")) && text.length <= 5) return true
+        // 조사가 붙어있으면 이름이 아님
+        if (text.matches(Regex(".*[은는이가을를의에게서와과도만부터까지요]$"))) return false
         
-        // 단일 자음/모음
-        if (text.matches(Regex("^[ㄱ-ㅎㅏ-ㅣ]+$"))) return true
+        // 일반적인 대화 단어들 제외 (더 많은 단어 추가)
+        val commonChatWords = listOf(
+            // 감탄사/반응
+            "안녕", "좋아", "싫어", "그래", "응", "어", "네", "아니", "맞아", "틀려",
+            "하하", "ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "ㅜㅜ",
+            
+            // 일반 대화
+            "그래서", "그런데", "근데", "그럼", "그치", "맞지", "아니지", "정말", "진짜",
+            "완전", "너무", "엄청", "되게", "진짜", "참", "좀", "약간", "조금",
+            "오늘", "내일", "어제", "지금", "나중", "이따", "곧", "다음",
+            "여기", "거기", "저기", "어디", "언제", "누구", "뭐", "왜", "어떻게",
+            
+            // 자주 쓰이는 단어
+            "그래야", "여자", "만", "ㅋ", "여기서", "이제", "미혼", "이야",
+            "원웅이", "곧", "이네", "얼마", "안남음", "다음주", "다음주네", "오", "아",
+            "유부남", "이", "사람들", "프로필", "죄다", "자식",
+            "영포티", "로서", "화가", "난다", "준비는", "잘", "되가나",
+            "그룹채팅", "리마인드", "요번주", "일요일", "노량진", "시",
         
         // UI 요소
-        val uiElements = listOf("메시지 입력", "←", "→", "+", "!", "#", "검색", "전송", "답장")
-        if (uiElements.any { text.contains(it) }) return true
+            "메시지", "입력", "검색", "전송", "답장", "채팅", "통화", "설정",
+            "사진", "동영상", "파일", "음성", "알림", "확인", "취소", "저장",
+            
+            // 명시적으로 제외
+            "나", "상대방"
+        )
+        if (commonChatWords.any { text == it }) return false
+        
+        // 한글 2-4글자만 이름으로 인정
+        if (text.matches(Regex("^[가-힣]{2,4}$"))) {
+            // 반복 글자 제외 (예: "하하")
+            if (text.length == 2 && text[0] == text[1]) return false
+            
+            // 성씨로 시작하는지 확인 (선택적 - 더 엄격하게)
+            val familyNames = listOf(
+                "김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", 
+                "한", "오", "서", "신", "권", "황", "안", "송", "전", "고",
+                "문", "양", "손", "배", "백", "허", "유", "남", "심", "노",
+                "하", "곽", "성", "차", "주", "우", "구", "원", "민", "진"
+            )
+            val firstChar = text[0].toString()
+            if (familyNames.contains(firstChar)) {
+                Log.d(TAG, "✓ 성씨로 시작하는 이름 패턴: $text")
+                return true
+            }
+            
+            // 성씨가 아니더라도 이름 패턴이면 인정 (더 보수적으로)
+            // 단, 3글자 이상이어야 함 (2글자는 일반 단어일 가능성 높음)
+            if (text.length >= 3) {
+                Log.d(TAG, "✓ 3글자 이상 한글 이름 가능성: $text")
+                return true
+            }
+            
+            return false
+        }
+        
+        // 영문 이름 (드물지만 지원)
+        if (text.matches(Regex("^[a-zA-Z]+\\s?[a-zA-Z]*$")) && text.length in 3..8) {
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * 폰트 크기를 이용한 이름 감지
+     * 상대방 이름은 메시지보다 작은 폰트 크기를 가짐
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun isPossibleNameByFontSize(text: String, fontSize: Float, allLines: List<TextLine>): Boolean {
+        // 길이 제한: 2-8글자
+        if (text.length < 2 || text.length > 8) return false
+        
+        // 시간 패턴 제외
+        if (text.matches(Regex("(오전|오후)?\\s*\\d{1,2}:\\d{2}"))) return false
+        if (text.matches(Regex("\\d{1,2}시\\s*\\d{1,2}분"))) return false
+        
+        // 숫자가 포함된 텍스트 제외
+        if (text.contains(Regex("\\d"))) return false
+        
+        // 특수문자 제외
+        if (text.contains(Regex("[!@#$%^&*()_+=\\[\\]{}|;:'\",.<>?/~`]"))) return false
+        
+        // 제외 단어들 (일반 메시지로 자주 쓰이는 단어)
+        val commonWords = listOf(
+            "메시지", "입력", "검색", "전송", "답장", "채팅", "통화", "설정",
+            "사진", "동영상", "파일", "음성", "알림", "확인", "취소", "저장",
+            "그래야", "여자", "만", "ㅋ", "여기서", "이제", "미혼", "이야",
+            "곧", "이네", "얼마", "안남음", "다음주", "다음주네", "네", "오", "아",
+            "유부남", "이", "사람들", "프로필", "죄다", "자식",
+            "영포티", "로서", "화가", "난다", "준비는", "잘", "되가나",
+            "그룹채팅", "리마인드", "요번주", "일요일", "노량진", "시",
+            "나", "상대방" // "나"와 "상대방"은 이름이 아님
+        )
+        if (commonWords.any { text == it }) return false
+        
+        // 조사가 붙어있는 경우 제외
+        if (text.matches(Regex(".*[은는이가을를의에게서와과도만부터까지요]$"))) return false
+        
+        // 한글 이름 (2-4글자)
+        if (text.matches(Regex("^[가-힣]{2,4}$"))) {
+            // 반복 글자 제외
+            if (text.length == 2 && text[0] == text[1]) return false
+            
+            // 폰트 크기는 참고용으로만 사용 (필수 조건 아님)
+            val averageFontSize = calculateAverageFontSize(allLines)
+            val isSmallerThanAverage = fontSize < averageFontSize * 0.85f
+            
+            if (isSmallerThanAverage) {
+                Log.d(TAG, "작은 폰트 크기로 이름 확신: '$text' (폰트크기: $fontSize, 평균: $averageFontSize)")
+            }
+            
+            // 한글 2-4글자는 기본적으로 이름으로 인정 (제외 단어 아니면)
+            return true
+        }
+        
+        // 영문 이름 (2-8글자)
+        if (text.matches(Regex("^[a-zA-Z]+\\s?[a-zA-Z]*$")) && text.length in 2..8) {
+            return true
+        }
+        
+        // 한글+영문 혼합 이름
+        if (text.matches(Regex("^[가-힣]{1,3}[a-zA-Z]{1,5}$")) || 
+            text.matches(Regex("^[a-zA-Z]{1,5}[가-힣]{1,3}$"))) {
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * 모든 텍스트 라인의 평균 폰트 크기 계산
+     */
+    private fun calculateAverageFontSize(allLines: List<TextLine>): Float {
+        if (allLines.isEmpty()) return 30f
+        
+        val totalFontSize = allLines.sumOf { it.fontSize.toDouble() }
+        return (totalFontSize / allLines.size).toFloat()
+    }
+    
+    /**
+     * 텍스트를 건너뛸지 판단 (시간, URL, UI 요소, 상태바 내용 등)
+     * 개선: 상태바 내용(시간, WiFi, 배터리 등) 제외
+     */
+    private fun shouldSkipText(text: String): Boolean {
+        val trimmedText = text.trim()
+        
+        // 빈 텍스트는 제외
+        if (trimmedText.isEmpty()) return true
+        
+        // 공백, 줄바꿈, 탭만 있는 경우 제외
+        if (trimmedText.replace("\\s".toRegex(), "").isEmpty()) {
+            Log.d(TAG, "공백만 있는 텍스트 제외")
+            return true
+        }
+        
+        // 시간 패턴 (카카오톡 시간 형식 + 상태바 시간)
+        if (trimmedText.matches(Regex("^(오전|오후)\\s*\\d{1,2}:\\d{2}$"))) {
+            Log.d(TAG, "시간 패턴 감지 (오전/오후): $trimmedText")
+            return true
+        }
+        if (trimmedText.matches(Regex("^\\d{1,2}:\\d{2}$"))) {
+            Log.d(TAG, "시간 패턴 감지 (숫자만): $trimmedText")
+            return true
+        }
+        if (trimmedText.matches(Regex("^\\d{1,2}시\\s*\\d{1,2}분$"))) {
+            Log.d(TAG, "시간 패턴 감지 (시분): $trimmedText")
+            return true
+        }
+        
+        // 날짜 패턴
+        if (trimmedText.matches(Regex("^\\d{4}[년.-]\\d{1,2}[월.-]\\d{1,2}[일]?$"))) {
+            Log.d(TAG, "날짜 패턴 감지: $trimmedText")
+            return true
+        }
+        
+        // 숫자만 (1-6글자) - 시간이나 날짜일 가능성
+        if (trimmedText.matches(Regex("^[\\d\\s:]+$")) && trimmedText.length <= 6) {
+            Log.d(TAG, "숫자만 패턴 감지: $trimmedText")
+            return true
+        }
+        
+        // 단일 자음/모음만 있는 경우 제외
+        if (trimmedText.matches(Regex("^[ㄱ-ㅎㅏ-ㅣ]+$"))) return true
+        
+        // UI 요소 아이콘/기호
+        val uiSymbols = listOf("←", "→", "+", "×", "•", "⋮", "☰", "[]", "[", "]", "1")
+        if (uiSymbols.any { trimmedText == it }) return true
+        
+        // UI 요소 텍스트 (정확히 일치하는 경우만)
+        val uiElements = listOf(
+            "메시지 입력", "검색", "전송", "답장", "채팅", "통화", "설정",
+            "사진", "동영상", "파일", "음성", "위치", "연락처",
+            "읽음", "안읽음", "확인", "취소", "저장", "삭제", "안 읽음"
+        )
+        if (uiElements.any { trimmedText == it }) return true
+        
+        // ✅ 상태바 키워드 필터링 삭제됨
+        // 이유 1: 대화 내용에 "WiFi", "배터리", "%" 등이 포함될 수 있음
+        // 이유 2: 상태바는 이미 Y 좌표로 제외됨 (lineY < statusBarHeight)
+        // 이유 3: Bitmap 크롭으로도 제외됨 (cropStatusBarFromBitmap)
+        
+        // 의미없는 메시지 패턴 제외
+        val meaninglessPatterns = listOf(
+            "나", "상대방", "나상대방", "상대방나",
+            "나나", "상대방상대방", "나나상대방", "상대방나나",
+            "[]", "[나]", "[상대방]", "나[]", "상대방[]"
+        )
+        if (meaninglessPatterns.any { trimmedText == it || trimmedText.contains(it) }) {
+            // "나"나 "상대방"이 포함된 짧은 문자열은 제외
+            if (trimmedText.length <= 10 && 
+                (trimmedText.contains("나") || trimmedText.contains("상대방")) &&
+                !trimmedText.matches(Regex(".*[가-힣]{3,}.*"))) {
+                return true
+            }
+        }
+        
+        // 1글자 메시지 중 의미있는 것들은 포함
+        // 예: "네", "ㅋ", "ㅎ", "오", "아" 등은 의미있는 메시지
+        if (trimmedText.length == 1) {
+            // 완성된 한글 1글자는 포함 (예: "네", "오", "아")
+            if (trimmedText.matches(Regex("^[가-힣]$"))) return false
+            
+            // 영문 1글자는 제외 (대부분 아이콘이나 버튼)
+            if (trimmedText.matches(Regex("^[a-zA-Z]$"))) return true
+            
+            // 특수문자 1개는 제외
+            if (trimmedText.matches(Regex("^[^가-힣a-zA-Z0-9]$"))) return true
+        }
         
         return false
     }
@@ -1311,6 +1775,72 @@ class FloatingButtonService :
     }
     
     /**
+     * OCR 결과에서 상대방 이름 추출
+     * 화면 최상단 중앙에서만 이름을 찾습니다 (채팅방 제목)
+     */
+    private fun extractOtherPersonName(visionText: Text): String? {
+        Log.d(TAG, "=== 상대방 이름 추출 시작 ===")
+        
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+        val screenCenter = screenWidth / 2
+        
+        // 상태바를 제외한 화면 최상단 영역만 검색
+        val statusBarHeight = getStatusBarHeight()
+        val topSearchStart = statusBarHeight  // 상태바 바로 아래부터
+        val topSearchEnd = statusBarHeight + (screenHeight * 0.08f).toInt()  // 상단 8%까지만
+        
+        // 화면 중앙 영역만 검색 (채팅방 제목은 중앙에 위치)
+        val centerLeftBound = (screenWidth * 0.2f).toInt()
+        val centerRightBound = (screenWidth * 0.8f).toInt()
+        
+        Log.d(TAG, "이름 검색 영역: Y=$topSearchStart~$topSearchEnd, X=$centerLeftBound~$centerRightBound")
+        
+        // 이름 후보들을 저장
+        val nameCandidates = mutableListOf<Triple<String, Int, Int>>()  // (이름, Y좌표, 신뢰도)
+        
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                val lineText = line.text.trim()
+                val boundingBox = line.boundingBox ?: continue
+                val lineY = boundingBox.top
+                val lineCenter = (boundingBox.left + boundingBox.right) / 2
+                
+                // Y 좌표 필터
+                if (lineY < topSearchStart || lineY > topSearchEnd) continue
+                
+                // X 좌표 필터
+                if (lineCenter < centerLeftBound || lineCenter > centerRightBound) continue
+                
+                // 이름 패턴 확인
+                if (lineText.length in 2..8 && lineText.matches(Regex("^[가-힣]{2,4}$"))) {
+                    var confidence = 100
+                    
+                    // 화면 중앙에 가까울수록 신뢰도 증가
+                    val distanceFromCenter = Math.abs(lineCenter - screenCenter).toFloat()
+                    val maxDistance = (screenWidth * 0.3f)
+                    val centerScore = (1.0f - (distanceFromCenter / maxDistance).coerceIn(0f, 1f)) * 50
+                    confidence += centerScore.toInt()
+                    
+                    Log.d(TAG, "✓ 이름 후보: '$lineText' (Y=$lineY, X중앙=$lineCenter, 신뢰도=$confidence)")
+                    nameCandidates.add(Triple(lineText, lineY, confidence))
+                }
+            }
+        }
+        
+        // 신뢰도가 가장 높은 후보 선택
+        val bestCandidate = nameCandidates.maxByOrNull { it.third }
+        
+        return if (bestCandidate != null && bestCandidate.third >= 120) {
+            Log.d(TAG, "✓✓✓ 상대방 이름 확정: '${bestCandidate.first}' (신뢰도=${bestCandidate.third})")
+            bestCandidate.first
+        } else {
+            Log.d(TAG, "이름 후보를 찾을 수 없음")
+            null
+        }
+    }
+    
+    /**
      * 채팅 메시지 분석
      */
     private fun analyzeChatMessage(visionText: Text, text: String): ChatAnalysis {
@@ -1344,6 +1874,10 @@ class FloatingButtonService :
         val confidence = calculateSenderConfidence(sender, position, text)
         Log.d(TAG, "발신자 구분 신뢰도: $confidence")
         
+        // 상대방 이름 추출
+        val otherPersonName = extractOtherPersonName(visionText)
+        Log.d(TAG, "상대방 이름: ${otherPersonName ?: "없음"}")
+        
         return ChatAnalysis(
             sender = sender,
             confidence = confidence,
@@ -1351,7 +1885,8 @@ class FloatingButtonService :
             timeInfo = timeInfo,
             messageType = messageType,
             isGroupChat = isGroupChat,
-            participants = participants
+            participants = participants,
+            otherPersonName = otherPersonName
         )
     }
     
@@ -2035,7 +2570,7 @@ fun FloatingButtonContent(
             )
         ) {
             Image(
-                painter = painterResource(id = R.drawable.mik_na_circle_app_icon_with_one_hand_out),
+                painter = painterResource(id = R.drawable.ic_floating_button_hand_new),
                 contentDescription = "텍스트 인식",
                 modifier = Modifier.size(48.dp)  // 아이콘 크기 조정
             )
