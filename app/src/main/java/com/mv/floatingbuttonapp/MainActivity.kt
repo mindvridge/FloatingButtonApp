@@ -63,6 +63,7 @@ enum class AppScreen {
     LOGIN,                  // 로그인 화면
     PERMISSION_OVERLAY,     // 권한 설정 1: 다른 앱 위에 그리기
     PERMISSION_ACCESSIBILITY, // 권한 설정 2: 접근성 서비스
+    INSTALLATION_COMPLETE,  // 설치 완료 화면
     SERVICE_CONTROL         // 서비스 실행 화면
 }
 
@@ -239,11 +240,22 @@ class MainActivity : ComponentActivity() {
                             hasPermission = hasAccessibilityPermission,
                             onRequestPermission = { requestAccessibilityPermission() },
                             onNextClick = {
-                                // 서비스 실행 화면으로 이동
-                                currentScreen = AppScreen.SERVICE_CONTROL
+                                // 설치 완료 화면으로 이동
+                                currentScreen = AppScreen.INSTALLATION_COMPLETE
                             },
                             onSkipClick = {
-                                // 건너뛰고 서비스 실행 화면으로 이동
+                                // 건너뛰고 설치 완료 화면으로 이동
+                                currentScreen = AppScreen.INSTALLATION_COMPLETE
+                            }
+                        )
+                    }
+                    
+                    AppScreen.INSTALLATION_COMPLETE -> {
+                        // 설치 완료 화면
+                        InstallationCompleteScreen(
+                            currentUser = currentUser,
+                            onStartClick = {
+                                // 서비스 실행 화면으로 이동
                                 currentScreen = AppScreen.SERVICE_CONTROL
                             }
                         )
@@ -322,7 +334,7 @@ class MainActivity : ComponentActivity() {
         return when {
             !hasOverlayPermission -> AppScreen.PERMISSION_OVERLAY
             !hasAccessibilityPermission -> AppScreen.PERMISSION_ACCESSIBILITY
-            else -> AppScreen.SERVICE_CONTROL
+            else -> AppScreen.INSTALLATION_COMPLETE
         }
     }
     

@@ -2555,13 +2555,8 @@ fun FloatingButtonContent(
         FloatingActionButton(
             onClick = onButtonClick,
             modifier = Modifier
-                .size(56.dp)  // 아이콘에 맞게 크기 조정
-                .shadow(
-                    elevation = 8.dp,
-                    shape = CircleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.15f),
-                    spotColor = Color.Black.copy(alpha = 0.25f)
-                ),
+                .size(112.dp)  // 2배로 확대 (56.dp -> 112.dp)
+            ,
             containerColor = Color.Transparent,  // 투명한 배경
             contentColor = Color.Transparent,    // 투명한 콘텐츠 색상
             elevation = FloatingActionButtonDefaults.elevation(
@@ -2572,7 +2567,7 @@ fun FloatingButtonContent(
             Image(
                 painter = painterResource(id = R.drawable.ic_floating_button_hand_new),
                 contentDescription = "텍스트 인식",
-                modifier = Modifier.size(48.dp)  // 아이콘 크기 조정
+                modifier = Modifier.size(96.dp)  // 아이콘도 2배로 확대 (48.dp -> 96.dp)
             )
         }
     }

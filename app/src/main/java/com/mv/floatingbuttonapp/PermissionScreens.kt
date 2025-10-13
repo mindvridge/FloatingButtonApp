@@ -189,7 +189,7 @@ fun PermissionOverlayScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(100.dp))
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
@@ -207,83 +207,97 @@ fun PermissionAccessibilityScreen(
     onNextClick: () -> Unit,
     onSkipClick: () -> Unit
 ) {
-    // 배경 색상 (임시로 단색 배경 사용)
+    // 흰색 배경
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFE8F5E8))
+            .background(Color.White)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 상단: 진행 상황 표시
+            // 상단: 단계 표시
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(60.dp))
+            
+            // 단계 표시 (1단계, 2단계, 3단계) - per2.png 이미지 사용
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .padding(horizontal = 40.dp)
+            ) {
+                // 배경 이미지
+                Image(
+                    painter = painterResource(id = R.drawable.per2),
+                    contentDescription = "단계 표시",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
                 
-                // 진행 바
+                // 텍스트 오버레이
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 단계 1 (완료)
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(Color(0xFF4CAF50), shape = CircleShape)
+                    // 1단계 (완료) - 회색 배경에 회색 텍스트
+                    Text(
+                        text = "1단계",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color.White,
+                        modifier = Modifier.offset(x = (-30).dp)
                     )
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(2.dp)
-                            .background(Color(0xFF4CAF50))
+                    
+                    // 2단계 (활성) - 주황색 배경에 흰색 텍스트
+                    Text(
+                        text = "2단계",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
-                    // 단계 2 (현재)
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(Color(0xFF6200EE), shape = CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(2.dp)
-                            .background(Color(0xFFDDDDDD))
-                    )
-                    // 단계 3
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(Color(0xFFDDDDDD), shape = CircleShape)
+                    
+                    // 3단계 (비활성) - 회색 배경에 회색 텍스트
+                    Text(
+                        text = "3단계",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFF666666),
+                        modifier = Modifier.offset(x = 30.dp)
                     )
                 }
+            }
                 
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "2 / 3",
-                    fontSize = 14.sp,
-                    color = Color(0xFF333333)
+                Spacer(modifier = Modifier.height(80.dp))
+                
+                // 중앙 일러스트레이션 - Per2Logo.png 사용
+                Image(
+                    painter = painterResource(id = R.drawable.per2logo),
+                    contentDescription = "접근성 서비스 권한",
+                    modifier = Modifier
+                        .size(300.dp)
+                        .padding(20.dp),
+                    contentScale = ContentScale.Fit
                 )
                 
-                Spacer(modifier = Modifier.height(40.dp))
-                
-                // 아이콘
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = Color(0xFF6200EE)
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
+                Spacer(modifier = Modifier.height(60.dp))
+            }
+            
+            // 하단: 텍스트와 버튼
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 // 제목
                 Text(
                     text = "접근성 서비스 권한",
@@ -304,124 +318,202 @@ fun PermissionAccessibilityScreen(
                     lineHeight = 24.sp
                 )
                 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(40.dp))
                 
-                // 권한 상태 카드
-                Card(
+                // 다음 단계로 버튼 - UIButtons.png 사용 (가로 길이의 1/2 사이즈)
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White.copy(alpha = 0.8f)
-                    ),
-                    shape = RoundedCornerShape(16.dp)
+                        .wrapContentHeight(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .fillMaxWidth(0.5f) // 가로 길이의 1/2
+                            .aspectRatio(3.2f) // 원본 비율 유지
+                            .clickable { onNextClick() }
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = if (hasPermission) Icons.Default.Check else Icons.Default.Close,
-                                contentDescription = "권한 상태",
-                                modifier = Modifier.size(24.dp),
-                                tint = if (hasPermission) Color(0xFF4CAF50) else Color(0xFFF44336)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = if (hasPermission) "권한 허용됨" else "권한 필요",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF333333)
-                            )
-                        }
+                        Image(
+                            painter = painterResource(id = R.drawable.uibuttons),
+                        contentDescription = "다음 단계로 버튼",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit // 비율 유지
+                    )
+                    
+                    // 버튼 위에 텍스트 오버레이 - 완전 중앙 정렬
+                    Text(
+                        text = "다음 단계로",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(80.dp))
+            }
+        }
+    }
+}
+
+/**
+ * 설치 완료 화면
+ * 모든 권한 설정이 완료된 후 표시되는 화면
+ */
+@Composable
+fun InstallationCompleteScreen(
+    currentUser: UserInfo?,
+    onStartClick: () -> Unit
+) {
+    // 흰색 배경
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // 상단: 단계 표시
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(60.dp))
+                
+                // 단계 표시 (1단계, 2단계, 3단계) - per3.png 이미지 사용
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .padding(horizontal = 40.dp)
+                ) {
+                    // 배경 이미지
+                    Image(
+                        painter = painterResource(id = R.drawable.per3),
+                        contentDescription = "단계 표시",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                    
+                    // 텍스트 오버레이
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 1단계 (완료) - 회색 배경에 회색 텍스트
+                        Text(
+                            text = "1단계",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.White,
+                            modifier = Modifier.offset(x = (-30).dp)
+                        )
                         
-                        if (!hasPermission) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "권한을 허용하면 키보드 입력 감지 기능을 사용할 수 있습니다.",
-                                fontSize = 14.sp,
-                                color = Color(0xFF666666),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        // 2단계 (완료) - 회색 배경에 회색 텍스트
+                        Text(
+                            text = "2단계",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.White,
+                        )
+                        
+                        // 3단계 (활성) - 주황색 배경에 흰색 텍스트
+                        Text(
+                            text = "3단계",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.offset(x = 30.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(80.dp))
+                
+                // 중앙 일러스트레이션 - Per3Logo.png 사용
+                Image(
+                    painter = painterResource(id = R.drawable.per3logo),
+                    contentDescription = "설치 완료",
+                    modifier = Modifier
+                        .size(300.dp)
+                        .padding(20.dp),
+                    contentScale = ContentScale.Fit
+                )
+                
+                Spacer(modifier = Modifier.height(60.dp))
+            }
+            
+            // 하단: 텍스트와 버튼
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 제목
+                Text(
+                    text = "설치 완료",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333),
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 설명
+                Text(
+                    text = "모든 설정이 완료되었습니다.\n이제 서비스를 시작할 수 있습니다.",
+                    fontSize = 16.sp,
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 24.sp
+                )
+                
+                Spacer(modifier = Modifier.height(40.dp))
+                
+                // 시작하기 버튼 - UIButtons.png 사용 (가로 길이의 1/2 사이즈)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.5f) // 가로 길이의 1/2
+                            .aspectRatio(3.2f) // 원본 비율 유지
+                            .clickable { onStartClick() }
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.uibuttons),
+                            contentDescription = "시작하기 버튼",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit // 비율 유지
+                        )
+                        
+                        // 버튼 위에 텍스트 오버레이 - 완전 중앙 정렬
+                        Text(
+                            text = "시작하기",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                     }
                 }
             }
             
-            // 하단: 버튼들
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 40.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // 권한 요청 버튼 (권한이 없을 때만 표시)
-                if (!hasPermission) {
-                    Button(
-                        onClick = onRequestPermission,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .padding(horizontal = 16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6200EE)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "권한 설정하기",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-                
-                // 다음 단계로 버튼
-                Button(
-                    onClick = onNextClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(horizontal = 16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (hasPermission) Color(0xFF4CAF50) else Color(0xFF6200EE)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = if (hasPermission) "다음 단계로" else "건너뛰기",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // 건너뛰기 버튼 (권한이 있을 때만 표시)
-                if (hasPermission) {
-                    TextButton(
-                        onClick = onSkipClick,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "건너뛰기",
-                            color = Color(0xFF666666),
-                            fontSize = 16.sp
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(60.dp))
         }
     }
 }
