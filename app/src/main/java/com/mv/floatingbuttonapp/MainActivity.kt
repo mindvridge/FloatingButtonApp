@@ -223,8 +223,13 @@ class MainActivity : ComponentActivity() {
                             hasPermission = hasOverlayPermission,
                             onRequestPermission = { requestOverlayPermission() },
                             onNextClick = {
-                                // 다음 권한 화면으로 이동
-                                currentScreen = AppScreen.PERMISSION_ACCESSIBILITY
+                                // 권한이 설정되어 있어야만 다음 화면으로 이동
+                                if (hasOverlayPermission) {
+                                    currentScreen = AppScreen.PERMISSION_ACCESSIBILITY
+                                } else {
+                                    Toast.makeText(this, "다른 앱 위에 그리기 권한을 먼저 설정해주세요.", Toast.LENGTH_SHORT).show()
+                                    requestOverlayPermission()
+                                }
                             },
                             onSkipClick = {
                                 // 건너뛰고 다음 권한 화면으로 이동
@@ -240,8 +245,13 @@ class MainActivity : ComponentActivity() {
                             hasPermission = hasAccessibilityPermission,
                             onRequestPermission = { requestAccessibilityPermission() },
                             onNextClick = {
-                                // 설치 완료 화면으로 이동
-                                currentScreen = AppScreen.INSTALLATION_COMPLETE
+                                // 권한이 설정되어 있어야만 다음 화면으로 이동
+                                if (hasAccessibilityPermission) {
+                                    currentScreen = AppScreen.INSTALLATION_COMPLETE
+                                } else {
+                                    Toast.makeText(this, "접근성 서비스 권한을 먼저 설정해주세요.", Toast.LENGTH_SHORT).show()
+                                    requestAccessibilityPermission()
+                                }
                             },
                             onSkipClick = {
                                 // 건너뛰고 설치 완료 화면으로 이동
@@ -1172,7 +1182,7 @@ fun TermsDialog(
                 item {
                     Text(
                         text = "제1조 (목적)\n" +
-                                "본 약관은 마인드브이알(이하 \"회사\")이 제공하는 \"이렇게 보내면 어때\" 서비스(이하 \"서비스\")의 이용과 관련하여 회사와 이용자 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.\n\n" +
+                                "본 약관은 마인드브이알(이하 \"회사\")이 제공하는 \"토키\" 서비스(이하 \"서비스\")의 이용과 관련하여 회사와 이용자 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.\n\n" +
                                 "제2조 (정의)\n" +
                                 "1. \"서비스\"란 AI 기반 텍스트 인식 및 답변 추천을 제공하는 플로팅 버튼 서비스를 의미합니다.\n" +
                                 "2. \"이용자\"란 서비스에 접속하여 본 약관에 따라 서비스를 이용하는 자를 의미합니다.\n\n" +

@@ -14,7 +14,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +44,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.wrapContentSize
 
 
 class OcrBottomSheetActivity : ComponentActivity() {
@@ -162,7 +171,7 @@ fun OcrBottomSheetContent(
     }
     var showCopiedMessage by remember { mutableStateOf(false) }
     var isEditMode by remember { mutableStateOf(false) }
-    var showResponseOptions by remember { mutableStateOf(false) }
+    var showResponseOptions by remember { mutableStateOf(true) }
     var generatedResponses by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -205,7 +214,7 @@ fun OcrBottomSheetContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
+            .background(Color(0xFFFFECDE))
             .clickable { if (!isEditMode && !showResponseOptions) onDismiss() }
     ) {
         Card(
@@ -217,53 +226,247 @@ fun OcrBottomSheetContent(
                 .imePadding()                         // 🔧 키보드 높이만큼 하단 패딩 부여
                 .animateContentSize(),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFECDE))
         ) {
+            val scrollState = rememberScrollState()
+            
+            // 화면이 열릴 때와 토키 추천 답변이 생성될 때 자동으로 아래로 스크롤
+            LaunchedEffect(Unit, generatedResponses) {
+                kotlinx.coroutines.delay(100) // UI가 완전히 렌더링될 때까지 대기
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+            
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(20.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
             ) {
                 // 헤더
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(bottom = 32.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 왼쪽 공간 (닫기 버튼과 균형 맞추기 위해)
+                    Spacer(modifier = Modifier.width(48.dp))
+                    
+                    // 중앙: 세부 옵션 또는 대화 등록
+                    if (showResponseOptions) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.filter_outline),
+                                contentDescription = "필터",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (showResponseOptions) "답변 추천" else "대화 등록",
+                                text = "세부 옵션",
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = {
-                        if (showResponseOptions) {
-                            showResponseOptions = false
-                            generatedResponses = emptyList()
-                        } else onDismiss()
-                    }) {
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF333333)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "대화 등록",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333)
+                        )
+                    }
+                    
+                    // 오른쪽: 닫기 버튼
+                    IconButton(onClick = { onDismiss() }) {
                         Icon(
-                            if (showResponseOptions) Icons.Default.ArrowBack else Icons.Default.Close,
+                            Icons.Default.Close,
                             contentDescription = "닫기",
-                            tint = Color.Gray
+                            tint = Color(0xFF999999)
                         )
                     }
                 }
 
                 // 답변 추천 화면
                 if (showResponseOptions) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        
+                        // 처음 표시될 때 자동으로 답변 생성
+                        LaunchedEffect(Unit) {
+                            if (generatedResponses.isEmpty() && !isLoading) {
+                                isLoading = true
+                                try {
+                                    val responses = generateResponses(
+                                        context = ocrText,
+                                        situation = selectedSituation,
+                                        mood = selectedMood,
+                                        length = selectedLength
+                                    )
+                                    generatedResponses = responses
+                                } catch (e: Exception) {
+                                    Log.e("API_ERROR", "Failed to generate initial responses: ${e.message}", e)
+                                    generatedResponses = listOf("오류가 발생했습니다. 다시 시도해주세요.")
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        }
 
-                        // 생성된 답변 목록
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // 1. 대상자 섹션
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp)
+                            ) {
+                                Text(
+                                    text = "대상자",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF333333),
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+                                
+                                // 첫 번째 줄: 썸, 연인, 친구
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp),
+                                    horizontalArrangement = Arrangement.Start
+                                ) {
+                                    listOf("썸", "연인", "친구").forEach { situation ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(end = 24.dp)
+                                        ) {
+                                            RadioButton(
+                                                selected = selectedSituation == situation,
+                                                onClick = { 
+                                                    selectedSituation = situation
+                                                    saveSelection(selectedSituation, selectedMood, selectedLength)
+                                                },
+                                                colors = RadioButtonDefaults.colors(
+                                                    selectedColor = Color(0xFF4CAF50),
+                                                    unselectedColor = Color(0xFF999999)
+                                                )
+                                            )
+                                            Text(
+                                                text = situation,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF333333),
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                // 두 번째 줄: 가족, 동료
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Start
+                                ) {
+                                    listOf("가족", "동료").forEach { situation ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(end = 24.dp)
+                                        ) {
+                                            RadioButton(
+                                                selected = selectedSituation == situation,
+                                                onClick = { 
+                                                    selectedSituation = situation
+                                                    saveSelection(selectedSituation, selectedMood, selectedLength)
+                                                },
+                                                colors = RadioButtonDefaults.colors(
+                                                    selectedColor = Color(0xFF4CAF50),
+                                                    unselectedColor = Color(0xFF999999)
+                                                )
+                                            )
+                                            Text(
+                                                text = situation,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF333333),
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 2. 답변 길이 섹션
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "답변 길이",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF333333),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf("짧게", "길게").forEach { length ->
+                                        RadioButton(
+                                            selected = selectedLength == length,
+                                            onClick = { 
+                                                selectedLength = length
+                                                saveSelection(selectedSituation, selectedMood, selectedLength)
+                                            },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = Color(0xFF4CAF50),
+                                                unselectedColor = Color(0xFF999999)
+                                            )
+                                        )
+                                        Text(
+                                            text = length,
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF333333),
+                                            modifier = Modifier.padding(start = 4.dp, top = 12.dp)
+                                        )
+                                        if (length != "길게") {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 3. 토키 추천 답변 섹션
                         if (isLoading) {
                             // 로딩 상태 표시
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 8.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -275,7 +478,7 @@ fun OcrBottomSheetContent(
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(20.dp),
                                         strokeWidth = 2.dp,
-                                        color = Color(0xFF2196F3)
+                                        color = Color(0xFFFF9800)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
@@ -286,17 +489,34 @@ fun OcrBottomSheetContent(
                                 }
                             }
                         } else if (generatedResponses.isNotEmpty()) {
+                            // 제목과 아이콘
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 32.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.bulb),
+                                    contentDescription = "추천",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(20.dp))
                             Text(
-                                text = "추천 답변",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
+                                    text = "토키 추천 답변",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF333333)
+                                )
+                            }
+                            
+                            // 추천 답변들
                             generatedResponses.forEach { response ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 8.dp)
+                                        .padding(horizontal = 16.dp, vertical = 4.dp)
                                         .clickable {
                                             try {
                                                 // 1. 클립보드에 복사
@@ -309,10 +529,8 @@ fun OcrBottomSheetContent(
                                                 onDismiss()
                                                 
                                                 // 3. 약간의 딜레이 후 텍스트 삽입 브로드캐스트 전송
-                                                // 이렇게 하면 사용자가 키보드를 활성화할 시간을 갖게 됨
                                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                                     try {
-                                                        // KeyboardDetectionAccessibilityService의 ACTION_INSERT_TEXT 사용
                                                         val intent = Intent(KeyboardDetectionAccessibilityService.ACTION_INSERT_TEXT).apply {
                                                             putExtra("text", response)
                                                             setPackage(context.packageName)
@@ -333,44 +551,56 @@ fun OcrBottomSheetContent(
                                                             Toast.LENGTH_SHORT
                                                         ).show()
                                                     }
-                                                }, 500) // 500ms 딜레이: 사용자가 키보드를 활성화할 시간
+                                                }, 500)
                                                 
                                             } catch (e: Exception) {
                                                 Log.e("TextInsert", "Failed to insert text: ${e.message}")
-                                                // 실패시 클립보드 복사만 수행
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                                 val clip = ClipData.newPlainText("text", response)
                                                 clipboard.setPrimaryClip(clip)
                                                 Toast.makeText(context, "클립보드에 복사되었습니다.", Toast.LENGTH_SHORT).show()
                                             }
                                         },
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(12.dp),
+                                            .padding(16.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text = response,
                                             fontSize = 14.sp,
+                                            color = Color(0xFF333333),
                                             modifier = Modifier.weight(1f)
                                         )
                                         Icon(
                                             Icons.Default.ContentCopy,
                                             contentDescription = "복사",
-                                            tint = Color.Gray,
-                                            modifier = Modifier.size(18.dp)
+                                            tint = Color(0xFF999999),
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }
                             }
-                            
-                            // 재 추천 버튼
-                            Button(
-                                onClick = {
+                        }
+                        
+                        // 4. 답변 추천받기 버튼 - recButtons.png 사용
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(4.0f) // 화면 가로에 맞게 비율 유지
+                                    .clickable(enabled = !isLoading) {
                                     isLoading = true
                                     scope.launch {
                                         try {
@@ -382,118 +612,37 @@ fun OcrBottomSheetContent(
                                             )
                                             generatedResponses = responses
                                         } catch (e: Exception) {
-                                            Log.e("API_ERROR", "Failed to regenerate responses: ${e.message}", e)
+                                                Log.e("API_ERROR", "Failed to generate responses: ${e.message}", e)
                                             generatedResponses = listOf("오류가 발생했습니다. 다시 시도해주세요.")
                                         } finally {
                                             isLoading = false
                                         }
                                     }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                                shape = RoundedCornerShape(24.dp),
-                                enabled = !isLoading
+                                    }
                             ) {
-                                if (isLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color.White
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (isLoading) "재생성 중..." else "다시 추천받기")
-                            }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                        // 옵션 타이틀
+                                Image(
+                                    painter = painterResource(id = R.drawable.recbuttons),
+                                    contentDescription = "답변 추천받기 버튼",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit // 비율 유지하면서 화면 가로에 맞게
+                                )
+                                
+                                // 버튼 위에 텍스트 오버레이
                         Text(
-                            text = "답변 추천 :",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
-                        // 대상자 (단일 선택)
-                        Text("대상자", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
-                        Row(
+                                    text = "답변 추천받기",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            situations.forEach { situation ->
-                                FilterChip(
-                                    selected = selectedSituation == situation,
-                                    onClick = { 
-                                        selectedSituation = situation
-                                        saveSelection(selectedSituation, selectedMood, selectedLength)
-                                    },
-                                    label = { Text(situation) },
-                                    modifier = Modifier.weight(1f)
+                                        .fillMaxSize()
+                                        .padding(16.dp)
+                                        .wrapContentSize(Alignment.Center)
                                 )
                             }
                         }
-
-                        // ✅ 답변 모드 (단일 선택)
-                        Text("답변 모드", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            moods.forEach { mood ->
-                                FilterChip(
-                                    selected = selectedMood == mood,
-                                    onClick = { 
-                                        selectedMood = mood
-                                        saveSelection(selectedSituation, selectedMood, selectedLength)
-                                    },
-                                    label = { Text(mood) }
-                                )
-                            }
-                        }
-
-                        // ✅ 답변 길이 (단일 선택)
-                        Text("답변 길이", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            lengths.forEach { length ->
-                                FilterChip(
-                                    selected = selectedLength == length,
-                                    onClick = { 
-                                        selectedLength = length
-                                        saveSelection(selectedSituation, selectedMood, selectedLength)
-                                    },
-                                    label = { Text(length) }
-                                )
-                            }
-                        }
-
-                        // 현재 설정 표시
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F4FF))
-                        ) {
-                            Text(
-                                text = "현재 설정 : [$selectedSituation] [$selectedMood] [$selectedLength]",
-                                fontSize = 12.sp,
-                                color = Color(0xFF0066CC),
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
 
                     }
                 } else {
@@ -524,53 +673,53 @@ fun OcrBottomSheetContent(
                                         .fillMaxSize()
                                         .verticalScroll(rememberScrollState())
                                 ) {
-                                // 텍스트를 줄 단위로 분리하여 표시
-                                ocrText.split("\n").forEach { line ->
-                                    when {
+                                    // 텍스트를 줄 단위로 분리하여 표시
+                                    ocrText.split("\n").forEach { line ->
+                                        when {
                                         line.startsWith("[") && !line.startsWith("[나]") -> {
                                             // 상대방 메시지 (나가 아닌 모든 화자)
-                                            Text(
-                                                text = line,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF2196F3), // 파란색
-                                                fontWeight = FontWeight.Medium,
+                                                Text(
+                                                    text = line,
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFF2196F3), // 파란색
+                                                    fontWeight = FontWeight.Medium,
                                                 lineHeight = 22.sp,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
                                                     .padding(vertical = 4.dp)
-                                            )
-                                        }
-                                        line.startsWith("[나]") -> {
-                                            // 나의 메시지
-                                            Text(
-                                                text = line,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF4CAF50), // 초록색
-                                                fontWeight = FontWeight.Medium,
+                                                )
+                                            }
+                                            line.startsWith("[나]") -> {
+                                                // 나의 메시지
+                                                Text(
+                                                    text = line,
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFF4CAF50), // 초록색
+                                                    fontWeight = FontWeight.Medium,
                                                 lineHeight = 22.sp,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
                                                     .padding(vertical = 4.dp)
-                                            )
-                                        }
-                                        line.isNotBlank() -> {
-                                            // 일반 텍스트
-                                            Text(
-                                                text = line,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF333333),
+                                                )
+                                            }
+                                            line.isNotBlank() -> {
+                                                // 일반 텍스트
+                                                Text(
+                                                    text = line,
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFF333333),
                                                 lineHeight = 22.sp,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
                                                     .padding(vertical = 4.dp)
-                                            )
-                                        }
+                                                )
+                                            }
                                         line.isBlank() -> {
                                             // 빈 줄인 경우 간격 추가
                                             Spacer(modifier = Modifier.height(8.dp))
+                                            }
                                         }
                                     }
-                                }
                                 }
                             } else if (suggestions.isNotEmpty()) {
                                 // OCR 텍스트가 없고 추천 답변만 있는 경우
