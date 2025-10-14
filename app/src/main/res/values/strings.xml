@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">이렇게 보내면 어때</string>
-    <string name="accessibility_service_label">이렇게 보내면 어때</string>
+    <string name="app_name">토키</string>
+    <string name="accessibility_service_label">토키</string>
     <string name="accessibility_service_description">이 서비스는 키보드가 표시되는 것을 감지하여 플로팅 버튼을 자동으로 위치시키고, 화면의 텍스트를 인식하여 AI 기반 답변을 추천합니다.</string>
     
     <!-- 카카오 SDK 앱 키 (실제 앱 키로 교체 필요) -->

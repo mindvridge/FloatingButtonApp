@@ -242,20 +242,31 @@ fun OcrBottomSheetContent(
                     .padding(20.dp)
                     .verticalScroll(scrollState)
             ) {
-                // 헤더
-                Row(
+                // 헤더 (상단 우측 닫기 버튼 + 중앙 타이틀)
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 32.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 8.dp)
                 ) {
-                    // 왼쪽 공간 (닫기 버튼과 균형 맞추기 위해)
-                    Spacer(modifier = Modifier.width(48.dp))
-                    
-                    // 중앙: 세부 옵션 또는 대화 등록
+                    // 상단 우측 X 닫기 버튼 (세부 옵션 텍스트보다 상단 그룹)
+                    IconButton(
+                        onClick = { onDismiss() },
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "닫기",
+                            tint = Color(0xFF999999)
+                        )
+                    }
+
+                    // 중앙 타이틀 영역
                     if (showResponseOptions) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .align(Alignment.Center),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -265,29 +276,29 @@ fun OcrBottomSheetContent(
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                    Text(
+                            Text(
                                 text = "세부 옵션",
-                        fontSize = 18.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF333333)
                             )
                         }
                     } else {
-                        Text(
-                            text = "대화 등록",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-                    }
-                    
-                    // 오른쪽: 닫기 버튼
-                    IconButton(onClick = { onDismiss() }) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "닫기",
-                            tint = Color(0xFF999999)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .align(Alignment.Center),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "대화 등록",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF333333)
+                            )
+                        }
                     }
                 }
 
@@ -319,19 +330,19 @@ fun OcrBottomSheetContent(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         
                         // 1. 대상자 섹션
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(
-                                modifier = Modifier.padding(8.dp)
+                                modifier = Modifier.padding(16.dp)
                             ) {
                                 Text(
                                     text = "대상자",
@@ -351,7 +362,7 @@ fun OcrBottomSheetContent(
                                     listOf("썸", "연인", "친구").forEach { situation ->
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(end = 24.dp)
+                                            modifier = Modifier.padding(end = 12.dp)
                                         ) {
                                             RadioButton(
                                                 selected = selectedSituation == situation,
@@ -368,7 +379,7 @@ fun OcrBottomSheetContent(
                                                 text = situation,
                                                 fontSize = 14.sp,
                                                 color = Color(0xFF333333),
-                                                modifier = Modifier.padding(start = 4.dp)
+                                                modifier = Modifier.padding(start = 2.dp)
                                             )
                                         }
                                     }
@@ -382,7 +393,7 @@ fun OcrBottomSheetContent(
                                     listOf("가족", "동료").forEach { situation ->
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(end = 24.dp)
+                                            modifier = Modifier.padding(end = 12.dp)
                                         ) {
                                             RadioButton(
                                                 selected = selectedSituation == situation,
@@ -399,7 +410,7 @@ fun OcrBottomSheetContent(
                                                 text = situation,
                                                 fontSize = 14.sp,
                                                 color = Color(0xFF333333),
-                                                modifier = Modifier.padding(start = 4.dp)
+                                                modifier = Modifier.padding(start = 2.dp)
                                             )
                                         }
                                     }
@@ -411,7 +422,7 @@ fun OcrBottomSheetContent(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             shape = RoundedCornerShape(12.dp)
@@ -424,33 +435,35 @@ fun OcrBottomSheetContent(
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF333333),
-                                    modifier = Modifier.padding(bottom = 6.dp)
+                                    modifier = Modifier.padding(bottom = 12.dp)
                                 )
                                 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.Start
                                 ) {
                                     listOf("짧게", "길게").forEach { length ->
-                                        RadioButton(
-                                            selected = selectedLength == length,
-                                            onClick = { 
-                                                selectedLength = length
-                                                saveSelection(selectedSituation, selectedMood, selectedLength)
-                                            },
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = Color(0xFF4CAF50),
-                                                unselectedColor = Color(0xFF999999)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(end = 24.dp)
+                                        ) {
+                                            RadioButton(
+                                                selected = selectedLength == length,
+                                                onClick = { 
+                                                    selectedLength = length
+                                                    saveSelection(selectedSituation, selectedMood, selectedLength)
+                                                },
+                                                colors = RadioButtonDefaults.colors(
+                                                    selectedColor = Color(0xFF4CAF50),
+                                                    unselectedColor = Color(0xFF999999)
+                                                )
                                             )
-                                        )
-                                        Text(
-                                            text = length,
-                                            fontSize = 14.sp,
-                                            color = Color(0xFF333333),
-                                            modifier = Modifier.padding(start = 4.dp, top = 12.dp)
-                                        )
-                                        if (length != "길게") {
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = length,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF333333),
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -459,11 +472,14 @@ fun OcrBottomSheetContent(
                         
                         // 3. 토키 추천 답변 섹션
                         if (isLoading) {
+                            // 위쪽 여백 추가
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
                             // 로딩 상태 표시
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
                                 colors = CardDefaults.cardColors(containerColor = Color.White),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 shape = RoundedCornerShape(12.dp)
@@ -489,11 +505,14 @@ fun OcrBottomSheetContent(
                                 }
                             }
                         } else if (generatedResponses.isNotEmpty()) {
+                            // 위쪽 여백 추가
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
                             // 제목과 아이콘
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 32.dp),
+                                    .padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -502,8 +521,8 @@ fun OcrBottomSheetContent(
                                     contentDescription = "추천",
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(20.dp))
-                            Text(
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
                                     text = "토키 추천 답변",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,

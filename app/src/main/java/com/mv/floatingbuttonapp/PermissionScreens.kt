@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,12 +49,11 @@ fun PermissionOverlayScreen(
             .fillMaxSize()
             .background(Color.White)
             .systemBarsPadding() // 시스템 바 영역 패딩 추가
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 80.dp), // 하단 여백 추가
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 상단 여백 (대폭 감소)
-        Spacer(modifier = Modifier.height(20.dp))
+        // 상단 여백 (화면 중앙 배치를 위한 여백)
+        Spacer(modifier = Modifier.weight(1f))
         
         // 단계 표시 (1단계, 2단계, 3단계) - per1.png 이미지 사용
         Box(
@@ -84,10 +84,7 @@ fun PermissionOverlayScreen(
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .offset(x = (-27).dp) // 오프셋 감소
-                        .align(Alignment.CenterVertically)
+                    modifier = Modifier.offset(x = (-32).dp) // 오프셋 감소
                 )
                 
                 // 2단계 (비활성) - 회색 배경에 회색 텍스트
@@ -95,9 +92,7 @@ fun PermissionOverlayScreen(
                     text = "2단계",
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Normal,
-                    color = Color(0xFF666666),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.CenterVertically)
+                    color = Color(0xFF666666)
                 )
                 
                 // 3단계 (비활성) - 회색 배경에 회색 텍스트 (오른쪽으로 이동)
@@ -106,10 +101,7 @@ fun PermissionOverlayScreen(
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Normal,
                     color = Color(0xFF666666),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .offset(x = 27.dp) // 오프셋 감소
-                        .align(Alignment.CenterVertically)
+                    modifier = Modifier.offset(x = 32.dp) // 오프셋 감소
                 )
             }
         }
@@ -187,8 +179,11 @@ fun PermissionOverlayScreen(
                 )
             }
         }
+        
+        // 하단 여백 (화면 중앙 배치를 위한 여백)
+        Spacer(modifier = Modifier.weight(1f))
     }
-    }
+}
 
 /**
  * 권한 설정 2: 접근성 서비스 화면
@@ -208,12 +203,11 @@ fun PermissionAccessibilityScreen(
             .fillMaxSize()
             .background(Color.White)
             .systemBarsPadding() // 시스템 바 영역 패딩 추가
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 80.dp), // 하단 여백 추가
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 상단 여백 (대폭 감소)
-        Spacer(modifier = Modifier.height(20.dp))
+        // 상단 여백 (화면 중앙 배치를 위한 여백)
+        Spacer(modifier = Modifier.weight(1f))
         
         // 단계 표시 (1단계, 2단계, 3단계) - per2.png 이미지 사용
         Box(
@@ -244,7 +238,7 @@ fun PermissionAccessibilityScreen(
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Normal,
                     color = Color.White,
-                    modifier = Modifier.offset(x = (-27).dp) // 오프셋 감소
+                    modifier = Modifier.offset(x = (-32).dp) // 오프셋 감소
                 )
                 
                 // 2단계 (활성) - 주황색 배경에 흰색 텍스트
@@ -261,7 +255,7 @@ fun PermissionAccessibilityScreen(
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Normal,
                     color = Color(0xFF666666),
-                    modifier = Modifier.offset(x = 27.dp) // 오프셋 감소
+                    modifier = Modifier.offset(x = 32.dp) // 오프셋 감소
                 )
             }
         }
@@ -339,8 +333,11 @@ fun PermissionAccessibilityScreen(
                 )
             }
         }
+        
+        // 하단 여백 (화면 중앙 배치를 위한 여백)
+        Spacer(modifier = Modifier.weight(1f))
     }
-    }
+}
 
 /**
  * 설치 완료 화면
@@ -357,12 +354,11 @@ fun InstallationCompleteScreen(
             .fillMaxSize()
             .background(Color.White)
             .systemBarsPadding() // 시스템 바 영역 패딩 추가
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 80.dp), // 하단 여백 추가
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 상단 여백 (대폭 감소)
-        Spacer(modifier = Modifier.height(20.dp))
+        // 상단 여백 (화면 중앙 배치를 위한 여백)
+        Spacer(modifier = Modifier.weight(1f))
         
         // 단계 표시 (1단계, 2단계, 3단계) - per3.png 이미지 사용
         Box(
@@ -393,7 +389,7 @@ fun InstallationCompleteScreen(
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Normal,
                     color = Color.White,
-                    modifier = Modifier.offset(x = (-27).dp) // 오프셋 감소
+                    modifier = Modifier.offset(x = (-32).dp) // 오프셋 감소
                 )
                 
                 // 2단계 (완료) - 회색 배경에 회색 텍스트
@@ -410,7 +406,7 @@ fun InstallationCompleteScreen(
                     fontSize = 12.sp, // 폰트 크기 감소
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = Modifier.offset(x = 27.dp) // 오프셋 감소
+                    modifier = Modifier.offset(x = 32.dp) // 오프셋 감소
                 )
             }
         }
@@ -482,8 +478,11 @@ fun InstallationCompleteScreen(
                 )
             }
         }
+        
+        // 하단 여백 (화면 중앙 배치를 위한 여백)
+        Spacer(modifier = Modifier.weight(1f))
     }
-    }
+}
 
 /**
  * 서비스 제어 화면
@@ -501,6 +500,13 @@ fun ServiceControlScreen(
     onOverlayPermissionClick: () -> Unit,
     onAccessibilityPermissionClick: () -> Unit
 ) {
+    // 화면 진입 시 권한이 모두 있고 서비스가 실행중이지 않으면 자동으로 시작
+    LaunchedEffect(hasOverlayPermission, hasAccessibilityPermission, isServiceRunning) {
+        if (hasOverlayPermission && hasAccessibilityPermission && !isServiceRunning) {
+            onStartServiceClick()
+        }
+    }
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -561,7 +567,7 @@ fun ServiceControlScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp),
+                .height(180.dp), // 높이 증가 (140dp -> 180dp)
             colors = CardDefaults.cardColors(
                 containerColor = if (isServiceRunning) Color(0xFF4CAF50) else Color(0xFFFF9800)
             ),
@@ -600,15 +606,16 @@ fun ServiceControlScreen(
                     onClick = if (isServiceRunning) onStopServiceClick else onStartServiceClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(40.dp),
+                        .height(56.dp), // 표준 Material Design 버튼 높이
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White
                     ),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp) // 내부 패딩 추가
                 ) {
                     Text(
                         text = if (isServiceRunning) "비활성화" else "토키 시작하기",
-                        fontSize = 16.sp,
+                        fontSize = 18.sp, // 폰트 크기 증가 (16sp -> 18sp)
                         fontWeight = FontWeight.Bold,
                         color = if (isServiceRunning) Color(0xFF4CAF50) else Color(0xFFFF9800)
                     )
@@ -779,35 +786,40 @@ fun ServiceControlScreen(
         
         Spacer(modifier = Modifier.weight(1f))
         
-        // 로그아웃 버튼 (하단) - uibuttons.png 사용
+        // 로그아웃 버튼 (하단) - uibuttons.png 사용 (권한 설정 버튼과 동일한 크기)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 40.dp)
-                .clickable { onLogoutClick() }
+                .wrapContentHeight(),
+            contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.uibuttons),
-                contentDescription = "로그아웃 버튼",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                contentScale = ContentScale.FillBounds
-            )
-            
-            // 버튼 텍스트 오버레이
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth(0.5f) // 가로 길이의 1/2 (권한 설정 버튼과 동일)
+                    .aspectRatio(3.2f) // 원본 비율 유지 (권한 설정 버튼과 동일)
+                    .clickable { onLogoutClick() }
             ) {
-                Text(
-                    text = "로그아웃",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
+                Image(
+                    painter = painterResource(id = R.drawable.uibuttons),
+                    contentDescription = "로그아웃 버튼",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit // 비율 유지
                 )
+                
+                // 버튼 텍스트 오버레이
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "로그아웃",
+                        fontSize = 18.sp, // 폰트 크기 증가 (16sp -> 18sp)
+                        fontWeight = FontWeight.Bold, // 폰트 굵기 증가
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }

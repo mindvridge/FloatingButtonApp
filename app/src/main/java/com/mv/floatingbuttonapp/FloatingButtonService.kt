@@ -16,13 +16,16 @@ import android.util.Log
 import android.view.*
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -662,7 +665,7 @@ class FloatingButtonService :
             } else {
                 // 초기 위치를 화면 하단으로 설정 (메시지 입력바 위쪽 고려)
                 val messageInputBarHeight = 120 // 메시지 입력바 예상 높이 (dp)
-                val buttonHeight = 44 // 플로팅 버튼 높이 (dp)
+                val buttonHeight = 56 // 플로팅 버튼 높이 (dp) - 원본 크기
                 val margin = 20 // 여백 (dp)
                 
                 val density = resources.displayMetrics.density
@@ -689,7 +692,7 @@ class FloatingButtonService :
         // 사용자가 드래그로 이동한 위치가 아닌 경우에만 키보드 높이에 맞춰 위치 조정
         floatingView?.let {
             if (!isUserMovedPosition) {
-                val buttonHeight = 44 // 플로팅 버튼 높이 (dp)
+                val buttonHeight = 56 // 플로팅 버튼 높이 (dp) - 원본 크기
                 val margin = 20 // 여백 (dp)
                 
                 // dp를 픽셀로 변환
@@ -2552,22 +2555,21 @@ fun FloatingButtonContent(
             }
         }
     ) {
-        FloatingActionButton(
-            onClick = onButtonClick,
+        // 클릭 효과(ripple effect) 제거를 위해 FloatingActionButton 대신 Box + clickable 사용
+        Box(
             modifier = Modifier
-                .size(112.dp)  // 2배로 확대 (56.dp -> 112.dp)
-            ,
-            containerColor = Color.Transparent,  // 투명한 배경
-            contentColor = Color.Transparent,    // 투명한 콘텐츠 색상
-            elevation = FloatingActionButtonDefaults.elevation(
-                defaultElevation = 0.dp,        // 그림자 제거
-                pressedElevation = 0.dp         // 눌렸을 때도 그림자 제거
-            )
+                .size(56.dp)  // 원본 크기 (Material Design 표준)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,  // 클릭 효과(ripple) 제거
+                    onClick = onButtonClick
+                ),
+            contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_floating_button_hand_new),
                 contentDescription = "텍스트 인식",
-                modifier = Modifier.size(96.dp)  // 아이콘도 2배로 확대 (48.dp -> 96.dp)
+                modifier = Modifier.size(48.dp)  // 원본 아이콘 크기
             )
         }
     }

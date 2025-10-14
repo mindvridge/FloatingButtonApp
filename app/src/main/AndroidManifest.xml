@@ -108,7 +108,7 @@
         <service
             android:name=".KeyboardDetectionAccessibilityService"
             android:exported="true"
-            android:label="이렇게 보내면 어때"
+            android:label="토키"
             android:description="@string/app_description"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>

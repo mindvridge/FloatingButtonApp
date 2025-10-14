@@ -273,6 +273,15 @@ class MainActivity : ComponentActivity() {
                     
                     AppScreen.SERVICE_CONTROL -> {
                         // 서비스 실행 화면
+                        // 권한이 모두 허용되어 있고 서비스가 실행 중이 아니라면 진입 즉시 자동 시작
+                        LaunchedEffect(hasOverlayPermission, hasAccessibilityPermission, isServiceRunningState) {
+                            if (hasOverlayPermission && hasAccessibilityPermission && !isServiceRunningState) {
+                                Log.d("MainActivity", "SERVICE_CONTROL 진입 - 권한 완료, 서비스 자동 시작 트리거")
+                                startFloatingService()
+                                // 상태 새로고침
+                                updateServiceRunningState()
+                            }
+                        }
                         ServiceControlScreen(
                             currentUser = currentUser,
                             hasOverlayPermission = hasOverlayPermission,
@@ -320,17 +329,44 @@ class MainActivity : ComponentActivity() {
         hasAccessibilityPermission = checkAccessibilityPermission()
         
         Log.d("MainActivity", "권한 상태 확인 - 오버레이: $hasOverlayPermission, 접근성: $hasAccessibilityPermission")
+        Log.d("MainActivity", "현재 화면: $currentScreen")
         
-        // 두 권한이 모두 허용되었고, 이전에 허용되지 않았던 경우 자동으로 서비스 시작
-        if (hasOverlayPermission && hasAccessibilityPermission) {
-            if (!previousOverlayPermission || !previousAccessibilityPermission) {
-                // 서비스가 이미 실행 중인지 확인
-                if (!isServiceRunning()) {
-                    Log.d("MainActivity", "모든 권한이 허용됨 - 서비스 자동 시작")
-                    startFloatingService()
-                    Toast.makeText(this, "모든 권한이 설정되었습니다. 서비스를 시작합니다.", Toast.LENGTH_SHORT).show()
-                } else {
-                    Log.d("MainActivity", "서비스가 이미 실행 중입니다.")
+        // 권한 설정 화면에서 권한이 완료되면 자동으로 다음 스텝으로 이동
+        when (currentScreen) {
+            AppScreen.PERMISSION_OVERLAY -> {
+                if (hasOverlayPermission && !previousOverlayPermission) {
+                    Log.d("MainActivity", "오버레이 권한 설정 완료 - 다음 단계로 이동")
+                    currentScreen = AppScreen.PERMISSION_ACCESSIBILITY
+                }
+            }
+            AppScreen.PERMISSION_ACCESSIBILITY -> {
+                if (hasAccessibilityPermission && !previousAccessibilityPermission) {
+                    Log.d("MainActivity", "접근성 권한 설정 완료 - 설치 완료 화면으로 이동")
+                    currentScreen = AppScreen.INSTALLATION_COMPLETE
+                }
+            }
+            AppScreen.SERVICE_CONTROL -> {
+                // 사용자 페이지에서 권한이 모두 허용되어 있으면 서비스 자동 시작
+                if (hasOverlayPermission && hasAccessibilityPermission) {
+                    if (!isServiceRunning()) {
+                        Log.d("MainActivity", "사용자 페이지 - 모든 권한 허용됨, 서비스 자동 시작")
+                        startFloatingService()
+                    }
+                }
+            }
+            else -> {
+                // 두 권한이 모두 허용되었고, 이전에 허용되지 않았던 경우 자동으로 서비스 시작
+                if (hasOverlayPermission && hasAccessibilityPermission) {
+                    if (!previousOverlayPermission || !previousAccessibilityPermission) {
+                        // 서비스가 이미 실행 중인지 확인
+                        if (!isServiceRunning()) {
+                            Log.d("MainActivity", "모든 권한이 허용됨 - 서비스 자동 시작")
+                            startFloatingService()
+                            Toast.makeText(this, "모든 권한이 설정되었습니다. 서비스를 시작합니다.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Log.d("MainActivity", "서비스가 이미 실행 중입니다.")
+                        }
+                    }
                 }
             }
         }
