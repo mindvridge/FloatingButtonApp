@@ -526,42 +526,7 @@ fun ServiceControlScreen(
             textAlign = TextAlign.Center
         )
         
-        Spacer(modifier = Modifier.height(40.dp))
-        
-        // 사용자 프로필
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // 프로필 이미지 (회색 원 안에 사람 아이콘)
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .background(
-                        color = Color(0xFFE0E0E0),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "사용자 프로필",
-                    modifier = Modifier.size(40.dp),
-                    tint = Color(0xFF666666)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // 사용자 닉네임
-            Text(
-                text = currentUser?.nickname ?: "닉네임123",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF333333)
-            )
-        }
-        
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(60.dp))
         
         // 서비스 제어 카드
         Card(

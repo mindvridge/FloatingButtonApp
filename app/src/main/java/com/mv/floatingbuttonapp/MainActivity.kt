@@ -1008,15 +1008,29 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // 이용약관 및 개인정보처리방침 링크
-                Text(
-                    text = "이용약관 및 개인정보처리방침",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showTerms = true }
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "이용약관",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Black,
+                        modifier = Modifier.clickable { showTerms = true }
+                    )
+                    Text(
+                        text = " 및 ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "개인정보처리방침",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Black,
+                        modifier = Modifier.clickable { showPrivacy = true }
+                    )
+                }
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 

@@ -24,6 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalView
@@ -174,6 +175,7 @@ fun OcrBottomSheetContent(
     var showResponseOptions by remember { mutableStateOf(true) }
     var generatedResponses by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var isButtonCooldown by remember { mutableStateOf(false) }  // 버튼 쿨다운 상태
     val scope = rememberCoroutineScope()
     
     // SharedPreferences를 사용하여 선택된 내용 저장/불러오기
@@ -317,7 +319,6 @@ fun OcrBottomSheetContent(
                                     val responses = generateResponses(
                                         context = ocrText,
                                         situation = selectedSituation,
-                                        mood = selectedMood,
                                         length = selectedLength
                                     )
                                     generatedResponses = responses
@@ -619,14 +620,14 @@ fun OcrBottomSheetContent(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(4.0f) // 화면 가로에 맞게 비율 유지
-                                    .clickable(enabled = !isLoading) {
+                                    .clickable(enabled = !isLoading && !isButtonCooldown) {  // 로딩 중이거나 쿨다운 중이면 클릭 불가
                                     isLoading = true
+                                    isButtonCooldown = true  // 쿨다운 시작
                                     scope.launch {
                                         try {
                                             val responses = generateResponses(
                                                 context = ocrText,
                                                 situation = selectedSituation,
-                                                mood = selectedMood,
                                                 length = selectedLength
                                             )
                                             generatedResponses = responses
@@ -635,6 +636,9 @@ fun OcrBottomSheetContent(
                                             generatedResponses = listOf("오류가 발생했습니다. 다시 시도해주세요.")
                                         } finally {
                                             isLoading = false
+                                            // 1초 후 쿨다운 해제
+                                            kotlinx.coroutines.delay(1000)
+                                            isButtonCooldown = false
                                         }
                                     }
                                     }
@@ -642,7 +646,9 @@ fun OcrBottomSheetContent(
                                 Image(
                                     painter = painterResource(id = R.drawable.recbuttons),
                                     contentDescription = "답변 추천받기 버튼",
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .alpha(if (isButtonCooldown && !isLoading) 0.5f else 1.0f),  // 쿨다운 중이면 반투명
                                     contentScale = ContentScale.Fit // 비율 유지하면서 화면 가로에 맞게
                                 )
                                 
@@ -651,7 +657,7 @@ fun OcrBottomSheetContent(
                                     text = "답변 추천받기",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
+                                    color = Color.White.copy(alpha = if (isButtonCooldown && !isLoading) 0.5f else 1.0f),  // 쿨다운 중이면 반투명
                                     textAlign = TextAlign.Center,
                             modifier = Modifier
                                         .fillMaxSize()
@@ -842,7 +848,6 @@ fun OcrBottomSheetContent(
                                         val responses = generateResponses(
                                             context = ocrText,
                                             situation = selectedSituation,
-                                            mood = selectedMood,
                                             length = selectedLength
                                         )
                                         generatedResponses = responses
@@ -893,14 +898,12 @@ fun OcrBottomSheetContent(
 suspend fun generateResponses(
     context: String,
     situation: String,
-    mood: String,
     length: String
 ): List<String> {
     return try {
         // 실제 API에 맞는 요청 데이터 생성
         val request = ReplyRequest(
             대상자 = mapSituationToApiValue(situation), // API가 기대하는 값으로 매핑
-            답변모드 = mapMoodToApiValue(mood), // API가 기대하는 값으로 매핑
             답변길이 = mapLengthToApiValue(length), // API가 기대하는 값으로 매핑
             대화내용 = context,
             추가지침 = "" // 추가지침은 빈 문자열로 설정
@@ -910,10 +913,6 @@ suspend fun generateResponses(
         if (request.대상자.isBlank()) {
             Log.e("API_DEBUG", "대상자가 비어있습니다")
             return listOf("대상자를 선택해주세요.", "설정을 확인해주세요.", "다시 시도해주세요.")
-        }
-        if (request.답변모드.isBlank()) {
-            Log.e("API_DEBUG", "답변모드가 비어있습니다")
-            return listOf("답변모드를 선택해주세요.", "설정을 확인해주세요.", "다시 시도해주세요.")
         }
         if (request.답변길이.isBlank()) {
             Log.e("API_DEBUG", "답변길이가 비어있습니다")
@@ -925,8 +924,8 @@ suspend fun generateResponses(
         }
 
         Log.d("API_DEBUG", "=== API Request Details ===")
-        Log.d("API_DEBUG", "원본 값 - situation: '$situation', mood: '$mood', length: '$length'")
-        Log.d("API_DEBUG", "매핑된 값 - 대상자: '${request.대상자}', 답변모드: '${request.답변모드}', 답변길이: '${request.답변길이}'")
+        Log.d("API_DEBUG", "원본 값 - situation: '$situation', length: '$length'")
+        Log.d("API_DEBUG", "매핑된 값 - 대상자: '${request.대상자}', 답변길이: '${request.답변길이}'")
         Log.d("API_DEBUG", "대화내용: '${request.대화내용}'")
         Log.d("API_DEBUG", "추가지침: '${request.추가지침}'")
         Log.d("API_DEBUG", "Full Request: $request")
@@ -991,7 +990,7 @@ suspend fun generateResponses(
                         "요청 데이터가 올바르지 않습니다. (422)",
                         "오류: $errorMessage",
                         "설정을 확인해주세요.",
-                        "대상자: ${request.대상자}, 답변모드: ${request.답변모드}, 답변길이: ${request.답변길이}"
+                        "대상자: ${request.대상자}, 답변길이: ${request.답변길이}"
                     )
                 }
                 400 -> listOf(
@@ -1025,10 +1024,14 @@ suspend fun generateResponses(
 fun extractRepliesFromResponse(response: com.mv.floatingbuttonapp.api.ReplyResponse?): List<String> {
     if (response == null) return emptyList()
     
-    // answers 필드에서 답변 추출
+    // answers 필드에서 답변 추출 (객체 배열에서 text 필드 추출)
     val answers = response.answers
     if (!answers.isNullOrEmpty()) {
-        return answers.filter { it.isNotBlank() }
+        return answers.mapNotNull { answer ->
+            // text 또는 content 필드를 우선적으로 사용
+            val text = answer.text ?: answer.content
+            text?.takeIf { it.isNotBlank() }
+        }
     }
     
     return emptyList()
@@ -1047,14 +1050,7 @@ fun mapSituationToApiValue(situation: String): String {
 }
 
 // 답변모드를 API가 기대하는 값으로 매핑하는 함수
-fun mapMoodToApiValue(mood: String): String {
-    return when (mood.lowercase()) {
-        "질문형" -> "질문형"
-        "공감형" -> "공감형"
-        "호응형" -> "호응형"
-        else -> "공감형" // 기본값
-    }
-}
+// 답변모드 제거에 따라 사용하지 않음
 
 // 길이를 API가 기대하는 값으로 매핑하는 함수
 fun mapLengthToApiValue(length: String): String {
