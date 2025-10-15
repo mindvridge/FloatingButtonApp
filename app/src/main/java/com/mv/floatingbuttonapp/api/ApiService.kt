@@ -10,7 +10,6 @@ import retrofit2.http.POST
  * 사용자가 선택한 옵션과 대화 내용을 바탕으로 AI에게 답변 생성을 요청할 때 사용됩니다.
  * 
  * @param 대상자 답변을 생성할 대상 (썸, 연인, 친구, 가족, 동료)
- * @param 답변모드 답변의 톤앤매너 (질문형, 공감형, 호응형)
  * @param 답변길이 답변의 길이 (짧게, 중간, 길게)
  * @param 대화내용 OCR로 추출된 원본 대화 내용
  * @param 추가지침 특별한 요구사항이나 추가 지침
@@ -18,11 +17,26 @@ import retrofit2.http.POST
  */
 data class ReplyRequest(
     val 대상자: String,
-    val 답변모드: String,
     val 답변길이: String,
     val 대화내용: String,
     val 추가지침: String,
     val 모델: String = "gemini-2.5-flash" // gemini-2.5-flash 모델로 설정
+)
+
+/**
+ * AI 답변 개별 항목 데이터 클래스
+ * 
+ * 서버가 answers 배열에 객체를 반환하는 경우를 처리합니다.
+ * 
+ * @param text 답변 텍스트 (필수)
+ * @param score 답변 점수 (선택)
+ * @param metadata 추가 메타데이터 (선택)
+ */
+data class Answer(
+    val text: String? = null,
+    val content: String? = null,  // text 대신 content를 사용하는 경우도 대비
+    val score: Double? = null,
+    val metadata: Map<String, Any>? = null
 )
 
 /**
@@ -32,14 +46,14 @@ data class ReplyRequest(
  * 
  * @param model 사용된 AI 모델 이름
  * @param count 생성된 답변의 개수
- * @param answers 생성된 답변 목록
+ * @param answers 생성된 답변 목록 (객체 배열)
  * @param message 응답 메시지
  * @param error 에러 메시지 (실패 시)
  */
 data class ReplyResponse(
     val model: String? = null,
     val count: Int? = null,
-    val answers: List<String>? = null,
+    val answers: List<Answer>? = null,
     val message: String? = null,
     val error: String? = null
 )
