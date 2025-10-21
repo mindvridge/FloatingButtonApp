@@ -78,7 +78,15 @@
             android:windowSoftInputMode="adjustResize|stateHidden"
             android:screenOrientation="portrait"
             android:excludeFromRecents="true"
-            android:taskAffinity="com.mv.floatingbuttonapp.ocr" />
+            android:taskAffinity="com.mv.toki.ocr" />
+
+        <!-- 플로팅 로그인 다이얼로그 액티비티 -->
+        <activity
+            android:name=".FloatingLoginActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.FloatingButtonApp" />
 
         <!-- 카카오 로그인 콜백 액티비티 -->
         <activity

@@ -6,15 +6,15 @@ plugins {
 }
 
 android {
-    namespace = "com.mv.floatingbuttonapp"
+    namespace = "com.mv.toki"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.mv.floatingbuttonapp"
+        applicationId = "com.mv.toki"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -86,6 +86,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.android.gms:play-services-auth:20.7.0")
+    
+    // 보안 저장소 (EncryptedSharedPreferences)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
