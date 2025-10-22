@@ -77,6 +77,8 @@ import kotlinx.coroutines.delay
 enum class AppScreen {
     LOGIN,                  // 로그인 화면
     REGISTER,               // 회원가입 화면 (분리된 화면)
+    FIND_USERNAME,          // 아이디 찾기 화면
+    FIND_PASSWORD,          // 비밀번호 찾기 화면
     PERMISSION_OVERLAY,     // 권한 설정 1: 다른 앱 위에 그리기
     PERMISSION_ACCESSIBILITY, // 권한 설정 2: 접근성 서비스
     INSTALLATION_COMPLETE,  // 설치 완료 화면
@@ -144,6 +146,11 @@ class MainActivity : ComponentActivity() {
      */
     private lateinit var emailLoginManager: EmailLoginManager
     
+    /**
+     * 비밀번호 재설정을 관리하는 매니저
+     */
+    private lateinit var passwordResetManager: PasswordResetManager
+    
     // ==================== 로딩 상태 관리 ====================
     
     /**
@@ -170,6 +177,18 @@ class MainActivity : ComponentActivity() {
      */
     private var isRegisterLoading by mutableStateOf(false)
     
+    /**
+     * 아이디 찾기 진행 상태
+     * true: 아이디 찾기 진행 중, false: 아이디 찾기 대기 중
+     */
+    private var isFindUsernameLoading by mutableStateOf(false)
+    
+    /**
+     * 비밀번호 재설정 진행 상태
+     * true: 비밀번호 재설정 진행 중, false: 비밀번호 재설정 대기 중
+     */
+    private var isPasswordResetLoading by mutableStateOf(false)
+    
     // ==================== 권한 상태 관리 ====================
     
     /**
@@ -195,6 +214,9 @@ class MainActivity : ComponentActivity() {
     
     // 약관동의 팝업 상태
     private var showTermsPopup by mutableStateOf(false)
+    
+    // 접근성 권한 동의 팝업 상태
+    private var showAccessibilityConsentDialog by mutableStateOf(false)
     
     // 앱 업데이트 관련 상태
     private var showUpdateDialog by mutableStateOf(false)
@@ -264,6 +286,7 @@ class MainActivity : ComponentActivity() {
         kakaoLoginManager = KakaoLoginManager(this)
         googleLoginManager = GoogleLoginManager(this)
         emailLoginManager = EmailLoginManager(this)
+        passwordResetManager = PasswordResetManager(this)
         
         // 카카오 SDK 초기화
         kakaoLoginManager.initializeKakaoSdk()
@@ -297,6 +320,8 @@ class MainActivity : ComponentActivity() {
                             onEmailLoginClick = { login, password -> loginWithEmail(login, password) },
                             onEmailRegisterClick = { username, email, password, name -> registerWithEmail(username, email, password, name) },
                             onOpenRegister = { currentScreen = AppScreen.REGISTER },
+                            onOpenFindUsername = { currentScreen = AppScreen.FIND_USERNAME },
+                            onOpenFindPassword = { currentScreen = AppScreen.FIND_PASSWORD },
                             onSaveTempConsent = { saveTempConsent() },
                             onClearTempConsent = { clearTempConsent() },
                             onOpenTermsLink = { openTermsLink() },
@@ -316,6 +341,27 @@ class MainActivity : ComponentActivity() {
                             onRegisterClick = { username, email, password, name -> registerWithEmail(username, email, password, name) },
                             onBackClick = { currentScreen = AppScreen.LOGIN },
                             isRegisterLoading = isRegisterLoading
+                        )
+                    }
+                    
+                    AppScreen.FIND_USERNAME -> {
+                        // 아이디 찾기 화면
+                        FindUsernameScreen(
+                            onFindUsernameClick = { email -> findUsernameWithEmail(email) },
+                            onBackClick = { currentScreen = AppScreen.LOGIN },
+                            isFindUsernameLoading = isFindUsernameLoading
+                        )
+                    }
+                    
+                    AppScreen.FIND_PASSWORD -> {
+                        // 비밀번호 찾기 화면
+                        FindPasswordScreen(
+                            onRequestPasswordReset = { email, onResult -> 
+                                requestPasswordReset(email, onResult)
+                            },
+                            onResetPassword = { token, newPassword -> resetPassword(token, newPassword) },
+                            onBackClick = { currentScreen = AppScreen.LOGIN },
+                            isPasswordResetLoading = isPasswordResetLoading
                         )
                     }
                     
@@ -359,6 +405,12 @@ class MainActivity : ComponentActivity() {
                             onSkipClick = {
                                 // 건너뛰고 설치 완료 화면으로 이동
                                 currentScreen = AppScreen.INSTALLATION_COMPLETE
+                            },
+                            showAccessibilityConsentDialog = showAccessibilityConsentDialog,
+                            onShowAccessibilityConsentDialog = { showAccessibilityConsentDialog = it },
+                            onAccessibilityPermissionAgreed = {
+                                // 팝업에서 동의 버튼 클릭 시 권한 설정으로 이동
+                                requestAccessibilityPermission()
                             }
                         )
                     }
@@ -561,25 +613,21 @@ class MainActivity : ComponentActivity() {
                 Log.d("MainActivity", "JWT 토큰 존재 - 자동 로그인 시도")
                 tokenManager.logTokenInfo()
                 
-                // 카카오 자동 로그인 먼저 시도
-                val kakaoResult = kakaoLoginManager.checkAutoLogin()
-                kakaoResult.onSuccess { loginResult ->
+                // 이메일 자동 로그인 먼저 시도 (JWT 토큰 기반)
+                val emailResult = emailLoginManager.checkAutoLogin()
+                emailResult.onSuccess { userInfo ->
                     isLoggedIn = true
                     // 자동 로그인 시 권한 상태에 따라 화면 결정
                     currentScreen = determineInitialScreen()
-                    currentUser = UserInfo(
-                        userId = loginResult.userId,
-                        nickname = loginResult.nickname,
-                        profileImageUrl = loginResult.profileImageUrl,
-                        email = loginResult.email
-                    )
-                    Log.d("MainActivity", "카카오 자동 로그인 성공: ${loginResult.nickname}")
+                    currentUser = userInfo
+                    Log.d("MainActivity", "이메일 자동 로그인 성공: ${userInfo.nickname}")
                     // 자동 로그인 확인 완료
                     isAutoLoginChecked = true
                 }.onFailure {
-                    // 카카오 자동 로그인 실패 시 구글 자동 로그인 시도
-                    val googleResult = googleLoginManager.checkAutoLogin()
-                    googleResult.onSuccess { loginResult ->
+                    // 이메일 자동 로그인 실패 시 카카오 자동 로그인 시도
+                    Log.d("MainActivity", "이메일 자동 로그인 실패 - 카카오 자동 로그인 시도")
+                    val kakaoResult = kakaoLoginManager.checkAutoLogin()
+                    kakaoResult.onSuccess { loginResult ->
                         isLoggedIn = true
                         // 자동 로그인 시 권한 상태에 따라 화면 결정
                         currentScreen = determineInitialScreen()
@@ -589,16 +637,33 @@ class MainActivity : ComponentActivity() {
                             profileImageUrl = loginResult.profileImageUrl,
                             email = loginResult.email
                         )
-                        Log.d("MainActivity", "구글 자동 로그인 성공: ${loginResult.nickname}")
+                        Log.d("MainActivity", "카카오 자동 로그인 성공: ${loginResult.nickname}")
                         // 자동 로그인 확인 완료
                         isAutoLoginChecked = true
                     }.onFailure {
-                        Log.d("MainActivity", "모든 자동 로그인 실패 - JWT 토큰 삭제")
-                        tokenManager.clearTokens()
-                        // 자동 로그인 실패 시 로그인 화면으로 돌아가기
-                        currentScreen = AppScreen.LOGIN
-                        // 자동 로그인 확인 완료
-                        isAutoLoginChecked = true
+                        // 카카오 자동 로그인 실패 시 구글 자동 로그인 시도
+                        val googleResult = googleLoginManager.checkAutoLogin()
+                        googleResult.onSuccess { loginResult ->
+                            isLoggedIn = true
+                            // 자동 로그인 시 권한 상태에 따라 화면 결정
+                            currentScreen = determineInitialScreen()
+                            currentUser = UserInfo(
+                                userId = loginResult.userId,
+                                nickname = loginResult.nickname,
+                                profileImageUrl = loginResult.profileImageUrl,
+                                email = loginResult.email
+                            )
+                            Log.d("MainActivity", "구글 자동 로그인 성공: ${loginResult.nickname}")
+                            // 자동 로그인 확인 완료
+                            isAutoLoginChecked = true
+                        }.onFailure {
+                            Log.d("MainActivity", "모든 자동 로그인 실패 - JWT 토큰 삭제")
+                            tokenManager.clearTokens()
+                            // 자동 로그인 실패 시 로그인 화면으로 돌아가기
+                            currentScreen = AppScreen.LOGIN
+                            // 자동 로그인 확인 완료
+                            isAutoLoginChecked = true
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -633,14 +698,19 @@ class MainActivity : ComponentActivity() {
                         profileImageUrl = loginResult.profileImageUrl,
                         email = loginResult.email
                     )
-                    // 로그인 성공 후 토큰 상태를 확인하고 서버에 동의 정보 저장
+                    
+                    // 로그인 성공 즉시 페이지 전환
+                    Log.d("MainActivity", "카카오 로그인 성공 - 즉시 페이지 전환")
+                    Toast.makeText(this@MainActivity, "🎉 로그인이 완료되었습니다!", Toast.LENGTH_SHORT).show()
+                    currentScreen = AppScreen.PERMISSION_OVERLAY
+                    
+                    // 백그라운드에서 토큰 처리 및 서버 저장
                     lifecycleScope.launch {
-                        Log.d("MainActivity", "카카오 로그인 성공 - 전체 프로세스 시작")
-                        Toast.makeText(this@MainActivity, "로그인 처리 중...", Toast.LENGTH_SHORT).show()
+                        Log.d("MainActivity", "백그라운드에서 토큰 처리 시작")
                         
-                        // 토큰이 준비될 때까지 대기 (최대 3초)
+                        // 토큰이 준비될 때까지 대기 (최대 5초)
                         var retryCount = 0
-                        val maxRetries = 30 // 3초 (100ms * 30)
+                        val maxRetries = 50 // 5초 (100ms * 50)
                         var tokenReady = false
                         
                         while (retryCount < maxRetries) {
@@ -656,21 +726,18 @@ class MainActivity : ComponentActivity() {
                             Log.d("MainActivity", "  - hasValidToken: ${tokenManager.hasValidToken()}")
                             Log.d("MainActivity", "  - isTokenExpired: ${tokenManager.isTokenExpired()}")
                             
-                            if (accessToken != null && accessToken.isNotEmpty() && refreshToken != null && refreshToken.isNotEmpty()) {
+                            // 토큰이 있으면 바로 처리하거나, 약간의 지연 후에도 없으면 바로 진행
+                            if ((accessToken != null && accessToken.isNotEmpty() && refreshToken != null && refreshToken.isNotEmpty()) || 
+                                (retryCount >= 10 && accessToken != null && accessToken.isNotEmpty())) {
                                 Log.d("MainActivity", "✅ 토큰 준비 완료 - 서버 저장 시작")
                                 tokenReady = true
                                 
-                                // 서버 저장 완료 후 권한 페이지로 이동
+                                // 서버에 동의 정보 저장 (백그라운드에서 처리)
                                 saveConsentToServerWithCompletion(loginResult.userId ?: "") { success ->
                                     if (success) {
-                                        Log.d("MainActivity", "🎉 전체 로그인 프로세스 완료 - 권한 페이지로 이동")
-                                        Toast.makeText(this@MainActivity, "🎉 로그인이 완료되었습니다!", Toast.LENGTH_SHORT).show()
-                                        currentScreen = AppScreen.PERMISSION_OVERLAY
+                                        Log.d("MainActivity", "🎉 백그라운드 서버 저장 완료")
                                     } else {
-                                        Log.e("MainActivity", "❌ 서버 저장 실패 - 로그인 실패 처리")
-                                        Toast.makeText(this@MainActivity, "로그인 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
-                                        // 로그인 실패 시 로그인 화면으로 돌아감
-                                        currentScreen = AppScreen.LOGIN
+                                        Log.e("MainActivity", "❌ 백그라운드 서버 저장 실패 - 하지만 로그인은 이미 완료됨")
                                     }
                                 }
                                 return@launch
@@ -679,11 +746,9 @@ class MainActivity : ComponentActivity() {
                             retryCount++
                         }
                         
-                        // 3초 후에도 토큰이 없으면 오류 처리
+                        // 5초 후에도 토큰이 없으면 로그만 남기고 계속 진행
                         if (!tokenReady) {
-                            Log.e("MainActivity", "❌ 토큰 준비 시간 초과 - 로그인 실패")
-                            Toast.makeText(this@MainActivity, "로그인 처리에 시간이 오래 걸립니다. 다시 시도해주세요.", Toast.LENGTH_LONG).show()
-                            currentScreen = AppScreen.LOGIN
+                            Log.e("MainActivity", "❌ 토큰 준비 시간 초과 - 하지만 로그인은 이미 완료됨")
                         }
                     }
                 }.onFailure { error ->
@@ -789,6 +854,115 @@ class MainActivity : ComponentActivity() {
                 Log.e("MainActivity", "회원가입 오류", e)
             } finally {
                 isRegisterLoading = false
+            }
+        }
+    }
+    
+    /**
+     * 아이디 찾기 실행
+     */
+    private fun findUsernameWithEmail(email: String) {
+        if (isFindUsernameLoading) {
+            Log.d("MainActivity", "아이디 찾기 이미 진행 중")
+            return
+        }
+        
+        isFindUsernameLoading = true
+        lifecycleScope.launch {
+            try {
+                val result = emailLoginManager.findUsername(email)
+                result.onSuccess { findResponse ->
+                    Toast.makeText(
+                        this@MainActivity, 
+                        findResponse.message ?: "아이디 찾기 결과를 이메일로 발송했습니다.", 
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Log.d("MainActivity", "아이디 찾기 성공: ${findResponse.message}")
+                    
+                    // 성공 후 로그인 화면으로 돌아가기
+                    currentScreen = AppScreen.LOGIN
+                }.onFailure { error ->
+                    Toast.makeText(this@MainActivity, "아이디 찾기 실패: ${error.message}", Toast.LENGTH_LONG).show()
+                    Log.e("MainActivity", "아이디 찾기 실패", error)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "아이디 찾기 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                Log.e("MainActivity", "아이디 찾기 오류", e)
+            } finally {
+                isFindUsernameLoading = false
+            }
+        }
+    }
+    
+    /**
+     * 비밀번호 재설정 요청 실행
+     */
+    private fun requestPasswordReset(email: String, onResult: (Boolean) -> Unit = {}) {
+        if (isPasswordResetLoading) {
+            Log.d("MainActivity", "비밀번호 재설정 요청 이미 진행 중")
+            onResult(false)
+            return
+        }
+        
+        isPasswordResetLoading = true
+        lifecycleScope.launch {
+            try {
+                val result = passwordResetManager.requestPasswordReset(email)
+                result.onSuccess { resetResponse ->
+                    Toast.makeText(
+                        this@MainActivity,
+                        resetResponse.message ?: "비밀번호 재설정 링크를 이메일로 발송했습니다.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Log.d("MainActivity", "비밀번호 재설정 요청 성공: ${resetResponse.message}")
+                    onResult(true)
+                }.onFailure { error ->
+                    Toast.makeText(this@MainActivity, "비밀번호 재설정 요청 실패: ${error.message}", Toast.LENGTH_LONG).show()
+                    Log.e("MainActivity", "비밀번호 재설정 요청 실패", error)
+                    onResult(false)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "비밀번호 재설정 요청 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                Log.e("MainActivity", "비밀번호 재설정 요청 오류", e)
+                onResult(false)
+            } finally {
+                isPasswordResetLoading = false
+            }
+        }
+    }
+    
+    /**
+     * 비밀번호 재설정 실행
+     */
+    private fun resetPassword(token: String, newPassword: String) {
+        if (isPasswordResetLoading) {
+            Log.d("MainActivity", "비밀번호 재설정 이미 진행 중")
+            return
+        }
+        
+        isPasswordResetLoading = true
+        lifecycleScope.launch {
+            try {
+                val result = passwordResetManager.resetPassword(token, newPassword)
+                result.onSuccess { resetResponse ->
+                    Toast.makeText(
+                        this@MainActivity,
+                        resetResponse.message ?: "비밀번호가 성공적으로 재설정되었습니다.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Log.d("MainActivity", "비밀번호 재설정 성공: ${resetResponse.message}")
+                    
+                    // 성공 후 로그인 화면으로 돌아가기
+                    currentScreen = AppScreen.LOGIN
+                }.onFailure { error ->
+                    Toast.makeText(this@MainActivity, "비밀번호 재설정 실패: ${error.message}", Toast.LENGTH_LONG).show()
+                    Log.e("MainActivity", "비밀번호 재설정 실패", error)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "비밀번호 재설정 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                Log.e("MainActivity", "비밀번호 재설정 오류", e)
+            } finally {
+                isPasswordResetLoading = false
             }
         }
     }
@@ -1088,6 +1262,9 @@ class MainActivity : ComponentActivity() {
     private fun saveConsentToServerWithCompletion(userId: String, onComplete: (Boolean) -> Unit) {
         lifecycleScope.launch {
             try {
+                Log.d("MainActivity", "=== saveConsentToServerWithCompletion 시작 ===")
+                Log.d("MainActivity", "입력 userId: $userId")
+                
                 // temp_consent와 terms_consent 모두 확인
                 val tempPrefs = getSharedPreferences("temp_consent", Context.MODE_PRIVATE)
                 val permanentPrefs = getSharedPreferences("terms_consent", Context.MODE_PRIVATE)
@@ -1137,12 +1314,11 @@ class MainActivity : ComponentActivity() {
                         Log.e("MainActivity", "JWT 토큰에서 사용자 ID 추출 실패", e)
                     }
                     
-                    // 서버 API 호출을 위한 요청 데이터 생성
-                    val request = com.mv.toki.api.TermsAgreeRequest(
-                        serviceTerms = true,
-                        privacyPolicy = true,
-                        termsVersion = termsVersion ?: "v1.0",
-                        userId = extractedUserId
+                    // 새로운 API 형식에 맞게 요청 데이터 생성
+                    val request = com.mv.toki.api.TermsAgreeMultipleRequest(
+                        termsVersion = (termsVersion ?: "v1.0").replace("v", ""), // API에서 "1.0" 형식 요구
+                        serviceAgreed = true,
+                        privacyAgreed = true
                     )
                     
                     try {
@@ -1179,12 +1355,11 @@ class MainActivity : ComponentActivity() {
                         }
                         
                         // 요청 데이터 로깅
-                        Log.d("MainActivity", "서버 요청 데이터:")
-                        Log.d("MainActivity", "  - serviceTerms: ${request.serviceTerms}")
-                        Log.d("MainActivity", "  - privacyPolicy: ${request.privacyPolicy}")
+                        Log.d("MainActivity", "서버 요청 데이터 (새로운 API 형식):")
                         Log.d("MainActivity", "  - termsVersion: ${request.termsVersion}")
-                        Log.d("MainActivity", "  - userId (JWT에서 추출): ${request.userId}")
-                        Log.d("MainActivity", "  - userId (로그인 결과): $userId")
+                        Log.d("MainActivity", "  - serviceAgreed: ${request.serviceAgreed}")
+                        Log.d("MainActivity", "  - privacyAgreed: ${request.privacyAgreed}")
+                        Log.d("MainActivity", "  - userId (입력): $userId")
                         
                         // JWT 토큰 내용 확인 (서버 오류 디버깅용)
                         try {
@@ -1198,9 +1373,9 @@ class MainActivity : ComponentActivity() {
                             Log.e("MainActivity", "JWT 토큰 분석 실패", e)
                         }
                         
-                        // Gemini API 서버로 약관 동의 저장 요청
+                        // 새로운 API로 약관 동의 저장 요청
                         // AuthInterceptor가 자동으로 Authorization 헤더를 추가하므로 별도 헤더 불필요
-                        val response = ApiClient.geminiApi.agreeToTerms(request)
+                        val response = ApiClient.geminiApi.agreeToTermsMultiple(request)
                         
                         Log.d("MainActivity", "서버 응답 상태:")
                         Log.d("MainActivity", "  - Code: ${response.code()}")
@@ -1210,15 +1385,11 @@ class MainActivity : ComponentActivity() {
                         if (response.isSuccessful && response.body() != null) {
                             val result = response.body()!!
                             Log.d("MainActivity", "약관 동의 서버 저장 성공:")
-                            Log.d("MainActivity", "  - userId: ${result.userId}")
-                            Log.d("MainActivity", "  - termsVersion: ${result.termsVersion}")
-                            Log.d("MainActivity", "  - serviceTerms: ${result.serviceTerms}")
-                            Log.d("MainActivity", "  - privacyPolicy: ${result.privacyPolicy}")
-                            Log.d("MainActivity", "  - agreedAt: ${result.agreedAt}")
                             Log.d("MainActivity", "  - success: ${result.success}")
+                            Log.d("MainActivity", "  - message: ${result.message}")
                             
-                            // 서버 저장 완료 후 로컬에 영구 저장
-                            saveConsentLocally(result.termsVersion)
+                            // 서버 저장 완료 후 로컬에 영구 저장 (요청한 버전 사용)
+                            saveConsentLocally("v${request.termsVersion}")
                             
                             // 임시 데이터 정리
                             clearTempConsent()
@@ -1298,11 +1469,15 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     Log.d("MainActivity", "임시 동의 정보가 없음 - 서버 저장 건너뜀")
+                    Log.d("MainActivity", "약관 동의 없이도 로그인 성공 처리")
                     // 동의 정보가 없어도 로그인은 성공으로 처리
                     onComplete(true)
                 }
             } catch (e: Exception) {
-                Log.e("MainActivity", "서버에 동의 정보 저장 실패", e)
+                Log.e("MainActivity", "=== saveConsentToServerWithCompletion 예외 발생 ===")
+                Log.e("MainActivity", "예외 메시지: ${e.message}")
+                Log.e("MainActivity", "예외 스택: ${e.stackTraceToString()}")
+                Log.e("MainActivity", "서버에 동의 정보 저장 실패 - 실패로 처리")
                 onComplete(false)
             }
         }
@@ -1749,6 +1924,8 @@ fun LoginScreen(
     onEmailLoginClick: (String, String) -> Unit,
     onEmailRegisterClick: (String, String, String, String) -> Unit,
     onOpenRegister: () -> Unit,
+    onOpenFindUsername: () -> Unit,
+    onOpenFindPassword: () -> Unit,
     onSaveTempConsent: () -> Unit,
     onClearTempConsent: () -> Unit,
     onOpenTermsLink: () -> Unit,
@@ -1986,7 +2163,8 @@ fun LoginScreen(
                             showEmailLogin = true
                             showRegister = false
                         },
-                        onOpenRegister = onOpenRegister
+                        onOpenRegister = onOpenRegister,
+                        onOpenFindPassword = onOpenFindPassword
                     )
                 } else {
                     // 기본 아이디/비밀번호 로그인 폼 (항상 표시)
@@ -2086,7 +2264,7 @@ fun LoginScreen(
                     ) {
                         TextButton(
                             onClick = { 
-                                // 아이디 찾기 기능 (추후 구현)
+                                onOpenFindUsername()
                             },
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                         ) {
@@ -2109,7 +2287,7 @@ fun LoginScreen(
                         
                         TextButton(
                             onClick = { 
-                                // 비밀번호 찾기 기능 (추후 구현)
+                                onOpenFindPassword()
                             },
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                         ) {
@@ -2399,7 +2577,8 @@ fun EmailLoginSection(
     onBackClick: () -> Unit,
     onSwitchToRegister: () -> Unit,
     onSwitchToLogin: () -> Unit,
-    onOpenRegister: () -> Unit
+    onOpenRegister: () -> Unit,
+    onOpenFindPassword: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -2547,7 +2726,7 @@ fun EmailLoginSection(
                 
                 TextButton(
                     onClick = { 
-                        // 비밀번호 찾기 기능 (추후 구현)
+                        onOpenFindPassword()
                     },
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                 ) {
@@ -2737,7 +2916,7 @@ fun EmailLoginSection(
                 
                 TextButton(
                     onClick = { 
-                        // 비밀번호 찾기 기능 (추후 구현)
+                        onOpenFindPassword()
                     },
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                 ) {
@@ -2767,6 +2946,526 @@ fun EmailLoginSection(
                         color = Color(0xFF4CAF50), // 녹색
                         fontSize = 12.sp
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 아이디 찾기 화면
+ */
+@Composable
+fun FindUsernameScreen(
+    onFindUsernameClick: (email: String) -> Unit,
+    onBackClick: () -> Unit,
+    isFindUsernameLoading: Boolean
+) {
+    var email by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf("") }
+    
+    // 이메일 형식 검증
+    fun validateEmail(inputEmail: String): Boolean {
+        val emailRegex = "^[A-Za-z0-9+_.-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})$".toRegex()
+        return emailRegex.matches(inputEmail.trim())
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .systemBarsPadding()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 상단 바
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "뒤로가기",
+                    tint = Color(0xFF666666)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            Text(
+                text = "아이디 찾기",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF333333)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(60.dp))
+        
+        // 제목
+        Text(
+            text = "아이디를 잊으셨나요?",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF333333),
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // 설명
+        Text(
+            text = "가입하신 이메일 주소를 입력해주세요.\n입력하신 이메일로 아이디를 발송해드립니다.",
+            fontSize = 14.sp,
+            color = Color(0xFF666666),
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+        
+        Spacer(modifier = Modifier.height(40.dp))
+        
+        // 이메일 입력 필드
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // 이메일 입력
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { 
+                        email = it
+                        emailError = ""
+                        // 실시간 검증
+                        if (it.isNotEmpty() && !validateEmail(it)) {
+                            emailError = "올바른 이메일 형식을 입력해주세요"
+                        }
+                    },
+                    label = { Text("이메일 주소") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Email, contentDescription = "이메일")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !isFindUsernameLoading,
+                    isError = emailError.isNotEmpty(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = if (emailError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0),
+                        unfocusedBorderColor = if (emailError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0)
+                    )
+                )
+                
+                // 에러 메시지
+                if (emailError.isNotEmpty()) {
+                    Text(
+                        text = emailError,
+                        color = Color.Red,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // 아이디 찾기 버튼
+                Button(
+                    onClick = { 
+                        if (email.isBlank()) {
+                            emailError = "이메일을 입력해주세요"
+                        } else if (!validateEmail(email)) {
+                            emailError = "올바른 이메일 형식을 입력해주세요"
+                        } else {
+                            onFindUsernameClick(email)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    enabled = email.isNotBlank() && emailError.isEmpty() && !isFindUsernameLoading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (email.isNotBlank() && emailError.isEmpty()) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+                    )
+                ) {
+                    if (isFindUsernameLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = if (isFindUsernameLoading) "발송 중..." else "아이디 찾기",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 비밀번호 찾기 화면
+ */
+@Composable
+fun FindPasswordScreen(
+    onRequestPasswordReset: (email: String, onResult: (Boolean) -> Unit) -> Unit,
+    onResetPassword: (token: String, newPassword: String) -> Unit,
+    onBackClick: () -> Unit,
+    isPasswordResetLoading: Boolean
+) {
+    val context = LocalContext.current
+    var currentStep by remember { mutableStateOf(0) } // 0: 이메일 입력, 1: 토큰과 새 비밀번호 입력
+    var email by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var emailError by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf("") }
+    var confirmPasswordError by remember { mutableStateOf("") }
+    
+    // 이메일 형식 검증
+    fun validateEmail(inputEmail: String): Boolean {
+        val emailRegex = "^[A-Za-z0-9+_.-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})$".toRegex()
+        return emailRegex.matches(inputEmail.trim())
+    }
+    
+    // 비밀번호 검증
+    fun validatePassword(inputPassword: String): com.mv.toki.utils.ValidationResult {
+        return com.mv.toki.utils.PasswordValidator.validatePassword(inputPassword)
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .systemBarsPadding()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 상단 바
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "뒤로가기",
+                    tint = Color(0xFF666666)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            Text(
+                text = "비밀번호 찾기",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF333333)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(60.dp))
+        
+        if (currentStep == 0) {
+            // 1단계: 이메일 입력
+            Text(
+                text = "비밀번호를 잊으셨나요?",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF333333),
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                text = "가입하신 이메일 주소를 입력해주세요.\n입력하신 이메일로 비밀번호 재설정 링크를 발송해드립니다.",
+                fontSize = 14.sp,
+                color = Color(0xFF666666),
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+            
+            Spacer(modifier = Modifier.height(40.dp))
+            
+            // 이메일 입력 필드
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { 
+                            email = it
+                            emailError = ""
+                            if (it.isNotEmpty() && !validateEmail(it)) {
+                                emailError = "올바른 이메일 형식을 입력해주세요"
+                            }
+                        },
+                        label = { Text("이메일 주소") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Email, contentDescription = "이메일")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isPasswordResetLoading,
+                        isError = emailError.isNotEmpty(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = if (emailError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0),
+                            unfocusedBorderColor = if (emailError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0)
+                        )
+                    )
+                    
+                    if (emailError.isNotEmpty()) {
+                        Text(
+                            text = emailError,
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = { 
+                            if (email.isBlank()) {
+                                emailError = "이메일을 입력해주세요"
+                            } else if (!validateEmail(email)) {
+                                emailError = "올바른 이메일 형식을 입력해주세요"
+                            } else {
+                                onRequestPasswordReset(email) { success ->
+                                    if (success) {
+                                        currentStep = 1
+                                    }
+                                    // 실패 시에는 currentStep을 변경하지 않음
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        enabled = email.isNotBlank() && emailError.isEmpty() && !isPasswordResetLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (email.isNotBlank() && emailError.isEmpty()) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+                        )
+                    ) {
+                        if (isPasswordResetLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = if (isPasswordResetLoading) "발송 중..." else "재설정 링크 발송",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        } else {
+            // 2단계: 토큰과 새 비밀번호 입력
+            Text(
+                text = "새 비밀번호 설정",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF333333),
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                text = "이메일로 받은 토큰과 새로운 비밀번호를 입력해주세요.",
+                fontSize = 14.sp,
+                color = Color(0xFF666666),
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+            
+            Spacer(modifier = Modifier.height(40.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    // 토큰 입력
+                    OutlinedTextField(
+                        value = token,
+                        onValueChange = { token = it },
+                        label = { Text("인증 토큰") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Security, contentDescription = "토큰")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isPasswordResetLoading,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFE0E0E0),
+                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // 새 비밀번호 입력
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { 
+                            newPassword = it
+                            passwordError = ""
+                            val validation = validatePassword(it)
+                            if (it.isNotEmpty() && validation is com.mv.toki.utils.ValidationResult.Error) {
+                                passwordError = validation.message
+                            }
+                        },
+                        label = { Text("새 비밀번호") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, contentDescription = "비밀번호")
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (passwordVisible) "비밀번호 숨기기" else "비밀번호 보기"
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isPasswordResetLoading,
+                        isError = passwordError.isNotEmpty(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = if (passwordError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0),
+                            unfocusedBorderColor = if (passwordError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0)
+                        )
+                    )
+                    
+                    if (passwordError.isNotEmpty()) {
+                        Text(
+                            text = passwordError,
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // 비밀번호 확인 입력
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { 
+                            confirmPassword = it
+                            confirmPasswordError = ""
+                            if (it.isNotEmpty() && it != newPassword) {
+                                confirmPasswordError = "비밀번호가 일치하지 않습니다"
+                            }
+                        },
+                        label = { Text("비밀번호 확인") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, contentDescription = "비밀번호 확인")
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (confirmPasswordVisible) "비밀번호 숨기기" else "비밀번호 보기"
+                                )
+                            }
+                        },
+                        visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isPasswordResetLoading,
+                        isError = confirmPasswordError.isNotEmpty(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = if (confirmPasswordError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0),
+                            unfocusedBorderColor = if (confirmPasswordError.isNotEmpty()) Color.Red else Color(0xFFE0E0E0)
+                        )
+                    )
+                    
+                    if (confirmPasswordError.isNotEmpty()) {
+                        Text(
+                            text = confirmPasswordError,
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = { 
+                            val isValidToken = token.isNotBlank()
+                            val isValidPassword = newPassword.isNotBlank() && passwordError.isEmpty()
+                            val isPasswordMatch = confirmPassword == newPassword && confirmPassword.isNotBlank()
+                            
+                            if (!isValidToken) {
+                                Toast.makeText(context, "토큰을 입력해주세요", Toast.LENGTH_SHORT).show()
+                            } else if (!isValidPassword) {
+                                Toast.makeText(context, "올바른 비밀번호를 입력해주세요", Toast.LENGTH_SHORT).show()
+                            } else if (!isPasswordMatch) {
+                                Toast.makeText(context, "비밀번호가 일치하지 않습니다", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onResetPassword(token, newPassword)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        enabled = token.isNotBlank() && newPassword.isNotBlank() && confirmPassword.isNotBlank() && 
+                                passwordError.isEmpty() && confirmPasswordError.isEmpty() && !isPasswordResetLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        )
+                    ) {
+                        if (isPasswordResetLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = if (isPasswordResetLoading) "재설정 중..." else "비밀번호 재설정",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }

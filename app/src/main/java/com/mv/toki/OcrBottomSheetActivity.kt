@@ -1011,6 +1011,9 @@ suspend fun generateResponses(
             Log.e("API_ERROR", "API Error: ${response.code()} - $errorMessage")
             Log.e("API_ERROR", "Request was: $request")
             
+            // 데이터베이스 오류 메시지 파싱
+            val userFriendlyMessage = extractUserFriendlyErrorMessage(errorMessage)
+            
             when (response.code()) {
                 401 -> {
                     // 토큰 만료 - 플로팅 로그인 다이얼로그 표시 필요
@@ -1037,15 +1040,31 @@ suspend fun generateResponses(
                     "오류: $errorMessage",
                     "다시 시도해주세요."
                 )
-                500 -> listOf(
-                    "서버 내부 오류가 발생했습니다. (500)",
-                    "오류: $errorMessage",
-                    "잠시 후 다시 시도해주세요."
-                )
+                500 -> {
+                    // 데이터베이스 오류 로깅
+                    Log.e("API_ERROR", "서버 내부 오류 (500) 발생")
+                    Log.e("API_ERROR", "원본 오류 메시지: $errorMessage")
+                    
+                    // 데이터베이스 관련 오류인지 확인
+                    if (isDatabaseError(errorMessage)) {
+                        Log.e("API_ERROR", "데이터베이스 오류 감지됨")
+                        listOf(
+                            "일시적인 서버 문제가 발생했습니다.",
+                            "잠시 후 다시 시도해주세요.",
+                            "문제가 지속되면 고객센터에 문의해주세요."
+                        )
+                    } else {
+                        listOf(
+                            "서버 내부 오류가 발생했습니다. (500)",
+                            "잠시 후 다시 시도해주세요.",
+                            userFriendlyMessage
+                        )
+                    }
+                }
                 else -> listOf(
                     "서버 오류가 발생했습니다. (${response.code()})",
-                    "오류: $errorMessage",
-                    "잠시 후 다시 시도해주세요."
+                    "잠시 후 다시 시도해주세요.",
+                    userFriendlyMessage
                 )
             }
         }
@@ -1415,6 +1434,51 @@ private fun findActualSpeakerName(messages: List<Pair<String, String>>): String 
     
     // 실제 이름이 있으면 반환, 없으면 빈 문자열 반환
     return actualName ?: ""
+}
+
+/**
+ * 데이터베이스 오류인지 확인하는 함수
+ */
+private fun isDatabaseError(errorMessage: String): Boolean {
+    val databaseErrorPatterns = listOf(
+        "psycopg2.errors",
+        "column.*does not exist",
+        "relation.*does not exist",
+        "database error",
+        "SQL error",
+        "UndefinedColumn",
+        "user_id",
+        "users.user_id"
+    )
+    
+    return databaseErrorPatterns.any { pattern ->
+        errorMessage.contains(pattern, ignoreCase = true)
+    }
+}
+
+/**
+ * 서버 오류 메시지에서 사용자 친화적인 메시지를 추출하는 함수
+ */
+private fun extractUserFriendlyErrorMessage(errorMessage: String): String {
+    return when {
+        errorMessage.contains("column users.user_id does not exist", ignoreCase = true) -> {
+            "사용자 정보를 처리하는 중 문제가 발생했습니다."
+        }
+        errorMessage.contains("psycopg2.errors", ignoreCase = true) -> {
+            "데이터베이스 연결에 문제가 발생했습니다."
+        }
+        errorMessage.contains("SQL error", ignoreCase = true) -> {
+            "데이터 처리 중 오류가 발생했습니다."
+        }
+        errorMessage.contains("database error", ignoreCase = true) -> {
+            "서버 데이터베이스에 일시적인 문제가 발생했습니다."
+        }
+        errorMessage.length > 200 -> {
+            // 오류 메시지가 너무 길면 줄여서 표시
+            errorMessage.take(200) + "..."
+        }
+        else -> errorMessage
+    }
 }
 
 

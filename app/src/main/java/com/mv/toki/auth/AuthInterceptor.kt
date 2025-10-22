@@ -69,6 +69,35 @@ class AuthInterceptor(context: Context) : Interceptor {
         // 요청 실행
         val response = chain.proceed(authenticatedRequest)
         
+        // 서버 오류 로깅 (500 오류 등)
+        if (response.code >= 500) {
+            Log.e(TAG, "=== 서버 오류 발생 ===")
+            Log.e(TAG, "HTTP 코드: ${response.code}")
+            Log.e(TAG, "URL: ${originalRequest.url}")
+            Log.e(TAG, "응답 메시지: ${response.message}")
+            
+            // JWT 토큰 정보 로깅 (서버 디버깅용)
+            tokenManager.logTokenInfo()
+            
+            // 오류 응답 본문 로깅 (읽기 전에 복사)
+            try {
+                val responseBody = response.peekBody(Long.MAX_VALUE)
+                val errorBodyString = responseBody.string()
+                Log.e(TAG, "서버 오류 응답 본문: $errorBodyString")
+                
+                // 데이터베이스 오류 특별 로깅
+                if (errorBodyString.contains("psycopg2.errors") || 
+                    errorBodyString.contains("column") || 
+                    errorBodyString.contains("users.user_id")) {
+                    Log.e(TAG, "=== 데이터베이스 스키마 오류 감지 ===")
+                    Log.e(TAG, "서버에서 users.user_id 컬럼을 찾을 수 없음")
+                    Log.e(TAG, "서버 개발팀에게 데이터베이스 스키마 확인 요청 필요")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "응답 본문 읽기 실패", e)
+            }
+        }
+        
         // 401 Unauthorized 처리 (토큰 만료)
         if (response.code == 401) {
             Log.e(TAG, "=== 401 Unauthorized - 토큰 갱신 시도 ===")

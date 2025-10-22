@@ -73,6 +73,46 @@ interface AuthApi {
     suspend fun login(
         @Body request: LoginRequest
     ): Response<TokenResponse>
+    
+    /**
+     * 아이디 찾기
+     * @param request 아이디 찾기 요청 (email)
+     * @return 아이디 찾기 결과
+     */
+    @POST("api/v1/auth/find-username")
+    suspend fun findUsername(
+        @Body request: FindUsernameRequest
+    ): Response<FindUsernameResponse>
+    
+    /**
+     * 비밀번호 재설정 요청
+     * @param request 비밀번호 재설정 요청
+     * @return 비밀번호 재설정 요청 결과
+     */
+    @POST("api/v1/auth/request-password-reset")
+    suspend fun requestPasswordReset(
+        @Body request: PasswordResetRequest
+    ): Response<PasswordResetResponse>
+    
+    /**
+     * 비밀번호 재설정 실행
+     * @param request 비밀번호 재설정 실행 요청
+     * @return 비밀번호 재설정 결과
+     */
+    @POST("api/v1/auth/reset-password")
+    suspend fun resetPassword(
+        @Body request: ResetPasswordRequest
+    ): Response<ResetPasswordResponse>
+    
+    /**
+     * 앱 업데이트 체크
+     * @param request 앱 업데이트 체크 요청
+     * @return 앱 업데이트 정보
+     */
+    @POST("api/v1/auth/app/check-update")
+    suspend fun checkAppUpdate(
+        @Body request: AppUpdateCheckRequest
+    ): Response<AppUpdateCheckResponse>
 }
 
 // ==================== 요청 데이터 클래스 ====================
@@ -150,6 +190,30 @@ data class LoginRequest(
     val password: String             // 비밀번호
 )
 
+/**
+ * 아이디 찾기 요청
+ */
+data class FindUsernameRequest(
+    @SerializedName("email")
+    val email: String                // 이메일 주소
+)
+
+/**
+ * 비밀번호 재설정 요청
+ */
+data class PasswordResetRequest(
+    @SerializedName("email") val email: String
+)
+
+/**
+ * 앱 업데이트 체크 요청
+ */
+data class AppUpdateCheckRequest(
+    @SerializedName("current_version") val currentVersion: String,
+    @SerializedName("platform") val platform: String,
+    @SerializedName("package_name") val packageName: String
+)
+
 // ==================== 응답 데이터 클래스 ====================
 
 /**
@@ -199,6 +263,59 @@ data class UserProfileResponse(
     
     @SerializedName("updated_at")
     val updatedAt: String?          // ISO 8601 형식
+)
+
+/**
+ * 아이디 찾기 응답
+ */
+data class FindUsernameResponse(
+    @SerializedName("message")
+    val message: String,              // 결과 메시지
+    
+    @SerializedName("email_sent")
+    val emailSent: Boolean            // 이메일 발송 여부
+)
+
+/**
+ * 비밀번호 재설정 요청 응답
+ */
+data class PasswordResetResponse(
+    @SerializedName("message") val message: String,
+    @SerializedName("detail") val detail: String? = null
+)
+
+/**
+ * 비밀번호 재설정 실행 요청
+ */
+data class ResetPasswordRequest(
+    @SerializedName("token") val token: String,
+    @SerializedName("new_password") val newPassword: String
+)
+
+/**
+ * 비밀번호 재설정 실행 응답
+ */
+data class ResetPasswordResponse(
+    @SerializedName("message") val message: String,
+    @SerializedName("success") val success: Boolean
+)
+
+/**
+ * 앱 업데이트 체크 응답
+ */
+data class AppUpdateCheckResponse(
+    @SerializedName("needs_update") val needsUpdate: Boolean,
+    @SerializedName("force_update") val forceUpdate: Boolean,
+    @SerializedName("update_available") val updateAvailable: Boolean,
+    @SerializedName("update_message") val updateMessage: String,
+    @SerializedName("store_url") val storeUrl: String,
+    @SerializedName("latest_version") val latestVersion: String,
+    @SerializedName("current_version") val currentVersion: String,
+    @SerializedName("release_notes") val releaseNotes: List<String>,
+    @SerializedName("update_priority") val updatePriority: String,
+    @SerializedName("update_type") val updateType: String,
+    @SerializedName("last_checked") val lastChecked: String,
+    @SerializedName("full_app_info") val fullAppInfo: String?
 )
 
 /**

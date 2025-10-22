@@ -219,6 +219,48 @@ class TokenManager(private val context: Context) {
         Log.d(TAG, "리프레시 토큰 존재: ${!refreshToken.isNullOrEmpty()}")
         Log.d(TAG, "토큰 만료까지 남은 시간: ${remainingTime}초")
         Log.d(TAG, "토큰 유효 여부: ${hasValidToken()}")
+        
+        // JWT 토큰 내용 분석 (서버 오류 디버깅용)
+        if (!accessToken.isNullOrEmpty()) {
+            try {
+                val jwtPayload = decodeJwtPayload(accessToken)
+                Log.d(TAG, "=== JWT 토큰 분석 (서버 오류 디버깅용) ===")
+                Log.d(TAG, "JWT 페이로드: $jwtPayload")
+            } catch (e: Exception) {
+                Log.e(TAG, "JWT 토큰 디코딩 실패", e)
+            }
+        }
+    }
+    
+    /**
+     * JWT 토큰의 페이로드를 디코딩하여 내용을 확인 (디버깅용)
+     * 서버에서 user_id 필드를 찾지 못하는 문제 디버깅에 사용
+     */
+    private fun decodeJwtPayload(token: String): String {
+        return try {
+            // JWT 토큰은 header.payload.signature 형식
+            val parts = token.split(".")
+            if (parts.size != 3) {
+                return "JWT 토큰 형식이 올바르지 않습니다 (부분 수: ${parts.size})"
+            }
+            
+            // 페이로드 부분 디코딩 (Base64)
+            val payload = parts[1]
+            
+            // Base64 패딩 추가 (필요한 경우)
+            val paddedPayload = when (payload.length % 4) {
+                2 -> "$payload=="
+                3 -> "$payload="
+                else -> payload
+            }
+            
+            val decodedBytes = android.util.Base64.decode(paddedPayload, android.util.Base64.DEFAULT)
+            val decodedString = String(decodedBytes, Charsets.UTF_8)
+            
+            "디코딩된 페이로드: $decodedString"
+        } catch (e: Exception) {
+            "JWT 디코딩 실패: ${e.message}"
+        }
     }
     
     /**

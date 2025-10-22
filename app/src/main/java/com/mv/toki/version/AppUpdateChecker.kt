@@ -52,7 +52,7 @@ class AppUpdateChecker(private val context: Context) {
             Log.d(TAG, "  - platform: ${request.platform}")
             Log.d(TAG, "  - package_name: ${request.packageName}")
             
-            val response = ApiClient.geminiApi.checkAppUpdate(request)
+            val response = ApiClient.authApi.checkAppUpdate(request)
             
             Log.d(TAG, "서버 응답 상태:")
             Log.d(TAG, "  - Code: ${response.code()}")

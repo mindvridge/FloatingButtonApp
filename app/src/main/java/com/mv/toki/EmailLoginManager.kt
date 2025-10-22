@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.mv.toki.api.ApiClient
 import com.mv.toki.api.ErrorResponse
+import com.mv.toki.api.FindUsernameRequest
+import com.mv.toki.api.FindUsernameResponse
 import com.mv.toki.api.LoginRequest
 import com.mv.toki.api.RegisterRequest
 import com.mv.toki.api.TokenResponse
@@ -158,6 +160,106 @@ class EmailLoginManager(private val context: Context) {
             Log.e(TAG, "회원가입 중 예외 발생", e)
             Result.failure(e)
         }
+    }
+    
+    /**
+     * 아이디 찾기 실행
+     * 
+     * @param email 이메일 주소
+     * @return 아이디 찾기 결과 (성공 시 응답 메시지, 실패 시 예외)
+     */
+    suspend fun findUsername(email: String): Result<FindUsernameResponse> {
+        return try {
+            Log.d(TAG, "아이디 찾기 시작: $email")
+            
+            // 이메일 형식 검증
+            if (!isValidEmail(email)) {
+                Log.e(TAG, "잘못된 이메일 형식: $email")
+                return Result.failure(Exception("올바른 이메일 형식을 입력해주세요."))
+            }
+            
+            // 아이디 찾기 요청 데이터 생성
+            val request = FindUsernameRequest(
+                email = email.trim()
+            )
+            
+            // API 호출
+            val response = ApiClient.authApi.findUsername(request)
+            
+            if (response.isSuccessful && response.body() != null) {
+                val findResponse = response.body()!!
+                Log.d(TAG, "아이디 찾기 API 응답 성공: ${findResponse.message}")
+                
+                Result.success(findResponse)
+            } else {
+                val errorMessage = getErrorMessage(response.code(), response.message(), response.errorBody())
+                Log.e(TAG, "아이디 찾기 API 실패: $errorMessage")
+                Result.failure(Exception(errorMessage))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "아이디 찾기 중 예외 발생", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 자동 로그인 확인
+     * JWT 토큰이 유효한지 확인하고 사용자 정보를 반환합니다.
+     */
+    suspend fun checkAutoLogin(): Result<UserInfo> {
+        return try {
+            Log.d(TAG, "이메일 자동 로그인 확인 시작")
+            
+            // JWT 토큰 유효성 확인
+            if (!tokenManager.hasValidToken()) {
+                Log.d(TAG, "유효한 JWT 토큰이 없습니다")
+                return Result.failure(Exception("자동 로그인 정보 없음"))
+            }
+            
+            // 액세스 토큰 가져오기
+            val accessToken = tokenManager.getAccessToken()
+            if (accessToken.isNullOrEmpty()) {
+                Log.d(TAG, "액세스 토큰이 없습니다")
+                return Result.failure(Exception("액세스 토큰 없음"))
+            }
+            
+            Log.d(TAG, "JWT 토큰 유효 - 사용자 프로필 조회 시도")
+            
+            // 사용자 프로필 조회로 자동 로그인 검증
+            val profileResponse = ApiClient.authApi.getUserProfile("Bearer $accessToken")
+            
+            if (profileResponse.isSuccessful && profileResponse.body() != null) {
+                val profile = profileResponse.body()!!
+                Log.d(TAG, "자동 로그인 성공: ${profile.name}")
+                
+                val userInfo = UserInfo(
+                    userId = profile.id,
+                    nickname = profile.name ?: profile.nickname ?: "사용자",
+                    email = profile.email ?: "",
+                    profileImageUrl = profile.picture
+                )
+                
+                Result.success(userInfo)
+            } else {
+                Log.d(TAG, "사용자 프로필 조회 실패 - 토큰이 만료되었을 수 있습니다")
+                // 토큰이 만료된 경우 토큰 삭제
+                tokenManager.clearTokens()
+                Result.failure(Exception("토큰 만료"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "자동 로그인 확인 중 예외 발생", e)
+            // 예외 발생 시 토큰 삭제
+            tokenManager.clearTokens()
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 이메일 형식 검증
+     */
+    private fun isValidEmail(email: String): Boolean {
+        val emailRegex = "^[A-Za-z0-9+_.-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})$".toRegex()
+        return emailRegex.matches(email.trim())
     }
     
     /**

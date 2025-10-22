@@ -201,9 +201,11 @@ fun PermissionAccessibilityScreen(
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
     onNextClick: () -> Unit,
-    onSkipClick: () -> Unit
+    onSkipClick: () -> Unit,
+    showAccessibilityConsentDialog: Boolean,
+    onShowAccessibilityConsentDialog: (Boolean) -> Unit,
+    onAccessibilityPermissionAgreed: () -> Unit
 ) {
-    var isChecked by remember { mutableStateOf(false) }
     // 흰색 배경
     Column(
         modifier = Modifier
@@ -301,35 +303,7 @@ fun PermissionAccessibilityScreen(
             lineHeight = 20.sp // 줄 간격 감소
         )
         
-        Spacer(modifier = Modifier.height(20.dp)) // 간격 대폭 감소
-        
-        // 체크박스와 동의 텍스트
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Checkbox(
-                checked = isChecked,
-                onCheckedChange = { isChecked = it },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = Color(0xFFF26A1C),
-                    uncheckedColor = Color(0xFFBDBDBD)
-                )
-            )
-            
-            Spacer(modifier = Modifier.width(8.dp))
-            
-            Text(
-                text = "권한 설정을 확인했습니다",
-                fontSize = 14.sp,
-                color = Color(0xFF333333)
-            )
-        }
-        
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(40.dp)) // 간격 증가
         
         // 권한 설정/다음 단계 버튼 - UIButtons.png 사용 (가로 길이의 1/2 사이즈)
         Box(
@@ -342,43 +316,25 @@ fun PermissionAccessibilityScreen(
                 modifier = Modifier
                     .fillMaxWidth(0.5f) // 가로 길이의 1/2
                     .aspectRatio(3.2f) // 원본 비율 유지
-                    .clickable(
-                        enabled = isChecked, // 체크박스가 체크되어야만 클릭 가능
-                        onClickLabel = when {
-                            !hasPermission && isChecked -> "권한 설정하기"
-                            hasPermission && isChecked -> "다음 단계로"
-                            else -> null
-                        }
-                    ) { 
-                        when {
-                            !hasPermission && isChecked -> onRequestPermission()
-                            hasPermission && isChecked -> onNextClick()
-                            // 체크박스가 체크되지 않았으면 아무것도 하지 않음
+                    .clickable { 
+                        if (hasPermission) {
+                            onNextClick()
+                        } else {
+                            // 권한 설정하기 버튼 클릭 시 팝업 표시
+                            onShowAccessibilityConsentDialog(true)
                         }
                     }
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.uibuttons),
-                    contentDescription = when {
-                        !hasPermission && isChecked -> "권한 설정 버튼"
-                        hasPermission && isChecked -> "다음 단계로 버튼"
-                        else -> "비활성화된 버튼"
-                    },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(
-                            if (!isChecked) 0.5f else 1f
-                        ), // 체크 안되면 반투명
+                    contentDescription = if (hasPermission) "다음 단계로 버튼" else "권한 설정 버튼",
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit // 비율 유지
                 )
                 
                 // 버튼 위에 텍스트 오버레이 - 완전 중앙 정렬
                 Text(
-                    text = when {
-                        !hasPermission && isChecked -> "권한 설정하기"
-                        hasPermission && isChecked -> "다음 단계로"
-                        else -> "체크 후 진행"
-                    },
+                    text = if (hasPermission) "다음 단계로" else "권한 설정하기",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -390,6 +346,147 @@ fun PermissionAccessibilityScreen(
         
         // 하단 여백 (화면 중앙 배치를 위한 여백)
         Spacer(modifier = Modifier.weight(1f))
+    }
+    
+    // 접근성 권한 동의 전체 화면 팝업
+    if (showAccessibilityConsentDialog) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.White
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // 스크롤 가능한 내용 영역
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // 상단 여백
+                    Spacer(modifier = Modifier.height(60.dp))
+                    
+                    // 제목
+                    Text(
+                        text = "[접근성 권한 필요]",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333),
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    // 내용
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "TalkKey는 여러 앱 전반에서 실시간 답장 추천, 오타 교정, 어휘 제안 등의 기능을 제공하기 위해 기기의 접근성 기능에 대한 권한이 필요합니다.",
+                            fontSize = 16.sp,
+                            color = Color(0xFF333333),
+                            lineHeight = 24.sp,
+                            textAlign = TextAlign.Start
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        Text(
+                            text = "- 텍스트 접근의 일부는 제한합니다",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333),
+                            textAlign = TextAlign.Start
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "우리는 사용자가 실제로 입력 중인 입력란의 텍스트만 확인합니다(메신저, 이메일, 문서, 메모 등).\n또한 신용카드 양식이나 비밀번호 입력란처럼 \"민감\"으로 표시된 입력란에 입력한 내용은 처리하지 않습니다.",
+                            fontSize = 16.sp,
+                            color = Color(0xFF333333),
+                            lineHeight = 24.sp,
+                            textAlign = TextAlign.Start
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        Text(
+                            text = "- 개인정보를 존중합니다",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333),
+                            textAlign = TextAlign.Start
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "서버에서 처리되는 모든 텍스트는 사용자 계정과 분리되며, 처리 후 삭제됩니다.\n\n자세한 내용은 개인정보 처리방침(Privacy Policy) 및 Trust Center를 확인해 주세요. TalkKey는 사용자 우선 원칙에 따라 개인정보 보호와 보안을 운영합니다.",
+                            fontSize = 16.sp,
+                            color = Color(0xFF333333),
+                            lineHeight = 24.sp,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                    
+                    // 하단 여백 (스크롤 영역 내)
+                    Spacer(modifier = Modifier.height(40.dp))
+                }
+                
+                // 고정된 하단 버튼 영역
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // 동의하지 않음 버튼 (왼쪽)
+                    Button(
+                        onClick = { onShowAccessibilityConsentDialog(false) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF9E9E9E)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "동의하지 않음",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+                    
+                    // 동의 버튼 (오른쪽)
+                    Button(
+                        onClick = {
+                            onShowAccessibilityConsentDialog(false)
+                            onAccessibilityPermissionAgreed()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFF26A1C)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "동의",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

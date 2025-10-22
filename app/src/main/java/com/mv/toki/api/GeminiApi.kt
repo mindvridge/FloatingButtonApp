@@ -52,7 +52,7 @@ interface GeminiApi {
     ): Response<AnalysisResponse>
     
     /**
-     * 약관 동의 저장
+     * 약관 동의 저장 (기존)
      * @param request 약관 동의 요청
      * @return 약관 동의 결과
      */
@@ -62,18 +62,23 @@ interface GeminiApi {
     ): Response<TermsAgreeResponse>
     
     /**
+     * 약관 동의 저장 (새로운 API - 여러 약관을 한번에 처리)
+     * @param request 약관 동의 요청
+     * @return 약관 동의 결과
+     */
+    @POST("api/v1/terms/agree-multiple")
+    suspend fun agreeToTermsMultiple(
+        @Body request: TermsAgreeMultipleRequest
+    ): Response<TermsAgreeMultipleResponse>
+    
+    /**
      * 약관 동의 상태 조회
      * @return 약관 동의 상태
      */
     @GET("api/v1/terms/status")
     suspend fun getTermsStatus(): Response<TermsStatusResponse>
     
-    // ==================== 앱 버전 체크 관련 API ====================
     
-    @POST("api/v1/app/check-update")
-    suspend fun checkAppUpdate(
-        @Body request: AppUpdateCheckRequest
-    ): Response<AppUpdateCheckResponse>
 }
 
 // ==================== 채팅 관련 데이터 클래스 ====================
@@ -149,6 +154,23 @@ data class TermsAgreeResponse(
 )
 
 /**
+ * 약관 동의 요청 (새로운 API 형식)
+ */
+data class TermsAgreeMultipleRequest(
+    @SerializedName("terms_version") val termsVersion: String,
+    @SerializedName("service_agreed") val serviceAgreed: Boolean,
+    @SerializedName("privacy_agreed") val privacyAgreed: Boolean
+)
+
+/**
+ * 약관 동의 응답 (새로운 API 형식)
+ */
+data class TermsAgreeMultipleResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("message") val message: String? = null
+)
+
+/**
  * 약관 동의 상태 응답
  */
 data class TermsStatusResponse(
@@ -158,34 +180,5 @@ data class TermsStatusResponse(
     @SerializedName("terms_version") val termsVersion: String?,
     @SerializedName("agreed_at") val agreedAt: String?,
     @SerializedName("success") val success: Boolean
-)
-
-// ==================== 앱 버전 체크 관련 데이터 클래스 ====================
-
-/**
- * 앱 업데이트 체크 요청
- */
-data class AppUpdateCheckRequest(
-    @SerializedName("current_version") val currentVersion: String,
-    @SerializedName("platform") val platform: String,
-    @SerializedName("package_name") val packageName: String
-)
-
-/**
- * 앱 업데이트 체크 응답
- */
-data class AppUpdateCheckResponse(
-    @SerializedName("needs_update") val needsUpdate: Boolean,
-    @SerializedName("force_update") val forceUpdate: Boolean,
-    @SerializedName("update_available") val updateAvailable: Boolean,
-    @SerializedName("update_message") val updateMessage: String,
-    @SerializedName("store_url") val storeUrl: String,
-    @SerializedName("latest_version") val latestVersion: String,
-    @SerializedName("current_version") val currentVersion: String,
-    @SerializedName("release_notes") val releaseNotes: List<String>,
-    @SerializedName("update_priority") val updatePriority: String,
-    @SerializedName("update_type") val updateType: String,
-    @SerializedName("last_checked") val lastChecked: String,
-    @SerializedName("full_app_info") val fullAppInfo: String?
 )
 
