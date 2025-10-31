@@ -47,11 +47,13 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         const val ACTION_KEYBOARD_HIDDEN = "com.mv.floatingbuttonapp.KEYBOARD_HIDDEN"
         const val ACTION_TAKE_SCREENSHOT = "com.mv.floatingbuttonapp.TAKE_SCREENSHOT"
         const val ACTION_INSERT_TEXT = "com.mv.floatingbuttonapp.INSERT_TEXT"
+        const val ACTION_FOREGROUND_APP_CHANGED = "com.mv.floatingbuttonapp.FOREGROUND_APP_CHANGED"
         
         // 브로드캐스트 엑스트라 키 상수들
         const val EXTRA_KEYBOARD_HEIGHT = "keyboard_height"
         const val EXTRA_MESSAGE_INPUT_BAR_HEIGHT = "message_input_bar_height"
         const val EXTRA_SCREENSHOT_BITMAP = "screenshot_bitmap"
+        const val EXTRA_PACKAGE_NAME = "package_name"
 
         /**
          * 서비스 인스턴스 (싱글톤 패턴)
@@ -78,6 +80,7 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
     private var lastKeyboardState = false
     private val screenBounds = Rect()
     private var screenHeight = 0
+    private var lastForegroundPackage: String? = null
     
     // 화면 캡처 권한 확인
     private val isScreenCaptureEnabled: Boolean
@@ -145,21 +148,42 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
 
         serviceInfo = info
 
+        // 초기 포그라운드 앱 확인 및 브로드캐스트 전송
+        checkInitialForegroundApp()
+        
         // 초기 키보드 상태 확인
         checkKeyboardState()
+    }
+    
+    /**
+     * 초기 포그라운드 앱 확인 및 브로드캐스트 전송
+     */
+    private fun checkInitialForegroundApp() {
+        try {
+            val currentPackage = getCurrentForegroundPackage()
+            if (currentPackage != null) {
+                lastForegroundPackage = currentPackage
+                Log.d(TAG, "초기 포그라운드 앱 확인: $currentPackage")
+                broadcastForegroundAppChanged(currentPackage)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "초기 포그라운드 앱 확인 중 오류", e)
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
-                // 윈도우 상태가 변경되었을 때 키보드 확인
+                // 윈도우 상태가 변경되었을 때 키보드 확인 및 포그라운드 앱 확인
+                checkForegroundApp(event)
                 checkKeyboardState()
             }
 
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
-                // EditText에 포커스가 갔을 때 키보드 확인
+                // EditText에 포커스가 갔을 때 키보드 확인 및 포그라운드 앱 확인
+                checkForegroundApp(event)
                 if (event.className?.contains("EditText") == true) {
                     // 약간의 지연 후 키보드 상태 확인 (키보드가 열리는데 시간이 걸림)
                     //rootInActiveWindow?.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS)
@@ -167,6 +191,36 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
                 }
             }
         }
+    }
+    
+    /**
+     * 현재 포그라운드 앱 패키지명 확인 및 브로드캐스트 전송
+     */
+    private fun checkForegroundApp(event: AccessibilityEvent?) {
+        try {
+            val currentPackage = event?.packageName?.toString()
+            
+            // 패키지명이 변경된 경우에만 브로드캐스트 전송
+            if (currentPackage != null && currentPackage != lastForegroundPackage) {
+                lastForegroundPackage = currentPackage
+                Log.d(TAG, "포그라운드 앱 변경: $currentPackage")
+                broadcastForegroundAppChanged(currentPackage)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "포그라운드 앱 확인 중 오류", e)
+        }
+    }
+    
+    /**
+     * 포그라운드 앱 변경 브로드캐스트 전송
+     */
+    private fun broadcastForegroundAppChanged(packageName: String) {
+        val intent = Intent(ACTION_FOREGROUND_APP_CHANGED).apply {
+            putExtra(EXTRA_PACKAGE_NAME, packageName)
+            setPackage(this@KeyboardDetectionAccessibilityService.packageName)  // 자체 앱에만 전송
+        }
+        sendBroadcast(intent)
+        Log.d(TAG, "포그라운드 앱 변경 브로드캐스트 전송: $packageName")
     }
 
     private fun checkKeyboardStateWithDelay() {
@@ -342,16 +396,50 @@ class KeyboardDetectionAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * 현재 포그라운드 앱 패키지명 가져오기
+     */
+    private fun getCurrentForegroundPackage(): String? {
+        return try {
+            val rootNode = rootInActiveWindow
+            rootNode?.packageName?.toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "현재 포그라운드 앱 패키지명 가져오기 실패", e)
+            null
+        }
+    }
+    
+    /**
+     * 외부에서 현재 포그라운드 앱 패키지명을 가져올 수 있는 public 메서드
+     */
+    fun getCurrentForegroundPackageName(): String? {
+        return getCurrentForegroundPackage()
+    }
+    
     // 키보드 표시 상태를 브로드캐스트
     private fun broadcastKeyboardShown() {
         val messageInputBarHeight = detectMessageInputBarHeight()
+        val currentPackage = getCurrentForegroundPackage()
+        
+        // 현재 포그라운드 앱도 함께 업데이트
+        if (currentPackage != null && currentPackage != lastForegroundPackage) {
+            lastForegroundPackage = currentPackage
+            Log.d(TAG, "키보드 표시 시 포그라운드 앱 확인: $currentPackage")
+            // 포그라운드 앱 변경도 별도로 브로드캐스트
+            broadcastForegroundAppChanged(currentPackage)
+        }
+        
         val intent = Intent(ACTION_KEYBOARD_SHOWN).apply {
             putExtra(EXTRA_KEYBOARD_HEIGHT, keyboardHeight)
             putExtra(EXTRA_MESSAGE_INPUT_BAR_HEIGHT, messageInputBarHeight)
+            // 현재 포그라운드 앱 패키지명도 함께 전송
+            if (currentPackage != null) {
+                putExtra(EXTRA_PACKAGE_NAME, currentPackage)
+            }
             setPackage(packageName)  // 자체 앱에만 전송
         }
         sendBroadcast(intent)
-        Log.d(TAG, "키보드 표시 브로드캐스트: 키보드높이=$keyboardHeight, 입력바높이=$messageInputBarHeight")
+        Log.d(TAG, "키보드 표시 브로드캐스트: 키보드높이=$keyboardHeight, 입력바높이=$messageInputBarHeight, 포그라운드앱=$currentPackage")
     }
 
     // 키보드 숨김 상태를 브로드캐스트

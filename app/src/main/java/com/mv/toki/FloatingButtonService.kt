@@ -309,6 +309,32 @@ class FloatingButtonService :
     private val tokenRefreshHandler = Handler(Looper.getMainLooper())
     
     /**
+     * 현재 포그라운드 앱 패키지명
+     * 카카오톡일 때만 플로팅 버튼 표시
+     */
+    private var currentForegroundPackage: String? = null
+    
+    /**
+     * 카카오톡 패키지명
+     */
+    private val KAKAO_TALK_PACKAGE = "com.kakao.talk"
+    
+    /**
+     * 포그라운드 변경 시 무시할 패키지 목록 (키보드/자체 앱/시스템 UI 등)
+     * 이 목록의 패키지로 잠깐 포그라운드가 바뀌어도 플로팅 버튼 상태를 바꾸지 않음
+     */
+    private val FOREGROUND_IGNORE_PACKAGES = setOf(
+        "com.mv.toki", // 자체 앱
+        // 주요 키보드들
+        "com.samsung.android.honeyboard",
+        "com.sec.android.inputmethod",
+        "com.google.android.inputmethod.latin",
+        "com.google.android.apps.inputmethod.korean",
+        // 시스템 UI
+        "com.android.systemui"
+    )
+    
+    /**
      * 백그라운드 토큰 갱신을 위한 Runnable
      */
     private val tokenRefreshRunnable = object : Runnable {
@@ -339,29 +365,121 @@ class FloatingButtonService :
                     val messageInputBarHeight = intent.getIntExtra(
                         KeyboardDetectionAccessibilityService.EXTRA_MESSAGE_INPUT_BAR_HEIGHT, 0
                     )
-                    Log.d(TAG, "Keyboard shown broadcast received, keyboard height: $keyboardHeight, input bar height: $messageInputBarHeight")
+                    // 현재 포그라운드 앱 패키지명도 함께 받기
+                    val packageName = intent.getStringExtra(KeyboardDetectionAccessibilityService.EXTRA_PACKAGE_NAME)
+                    if (packageName != null) {
+                        if (!FOREGROUND_IGNORE_PACKAGES.contains(packageName)) {
+                            currentForegroundPackage = packageName
+                            Log.d(TAG, "키보드 표시 브로드캐스트에서 포그라운드 앱 확인: $packageName")
+                        } else {
+                            Log.d(TAG, "무시 패키지이므로 포그라운드 업데이트 생략: $packageName")
+                        }
+                    } else {
+                        Log.w(TAG, "키보드 표시 브로드캐스트에 포그라운드 앱 정보가 없음")
+                    }
+                    Log.d(TAG, "Keyboard shown broadcast received, keyboard height: $keyboardHeight, input bar height: $messageInputBarHeight, package: $packageName")
                     onKeyboardShown(keyboardHeight, messageInputBarHeight)
                 }
                 KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_HIDDEN -> {
                     Log.d(TAG, "Keyboard hidden broadcast received")
                     
-                    // OCR을 위해 키보드 숨김을 기다리고 있었다면 OCR 실행
-                    if (isWaitingForKeyboardHide) {
-                        Log.d(TAG, "키보드 숨김 확인됨, OCR 실행 시작")
-                        isWaitingForKeyboardHide = false
+                    // 키보드 숨김 브로드캐스트를 받았지만, 실제로 키보드가 숨겨졌는지 다시 확인
+                    // 지연을 두고 확인하여 키 입력 중 일시적인 키보드 상태 변경을 무시
+                    handler.postDelayed({
+                        val accessibilityService = KeyboardDetectionAccessibilityService.instance
+                        val isKeyboardActuallyVisible = accessibilityService?.let {
+                            KeyboardDetectionAccessibilityService.isKeyboardVisible
+                        } ?: false
                         
-                        // 키보드가 완전히 숨겨진 후 약간의 지연을 두고 화면 캡처 실행
-                        handler.postDelayed({
-                            performOcrCapture()
-                        }, 300) // 300ms 지연: 키보드 애니메이션이 완전히 끝나도록 대기
+                        val isKakaoTalk = currentForegroundPackage == KAKAO_TALK_PACKAGE
                         
-                        // 키보드가 숨겨졌으므로 플로팅 버튼도 제거
-                        onKeyboardHidden()
-                    } else {
-                        // 일반적인 키보드 숨김 처리
-                        onKeyboardHidden()
+                        Log.d(TAG, "키보드 숨김 재확인 - 실제 키보드 상태: $isKeyboardActuallyVisible, 카카오톡: $isKakaoTalk")
+                        
+                        // 실제로 키보드가 여전히 표시되어 있고 카카오톡이면 무시
+                        if (isKeyboardActuallyVisible && isKakaoTalk) {
+                            Log.d(TAG, "키보드가 실제로는 여전히 활성화되어 있으므로 키보드 숨김 무시")
+                            return@postDelayed
+                        }
+                        
+                        // OCR을 위해 키보드 숨김을 기다리고 있었다면 OCR 실행
+                        if (isWaitingForKeyboardHide) {
+                            Log.d(TAG, "키보드 숨김 확인됨, OCR 실행 시작")
+                            isWaitingForKeyboardHide = false
+                            
+                            // 키보드가 완전히 숨겨진 후 약간의 지연을 두고 화면 캡처 실행
+                            handler.postDelayed({
+                                performOcrCapture()
+                            }, 300) // 300ms 지연: 키보드 애니메이션이 완전히 끝나도록 대기
+                            
+                            // 키보드가 숨겨졌으므로 플로팅 버튼도 제거
+                            onKeyboardHidden()
+                        } else {
+                            // 일반적인 키보드 숨김 처리
+                            onKeyboardHidden()
+                        }
+                    }, 100) // 100ms 지연으로 키 입력 중 일시적인 상태 변경 무시
+                }
+                KeyboardDetectionAccessibilityService.ACTION_FOREGROUND_APP_CHANGED -> {
+                    val packageName = intent?.getStringExtra(KeyboardDetectionAccessibilityService.EXTRA_PACKAGE_NAME)
+                    Log.d(TAG, "포그라운드 앱 변경: $packageName")
+                    val previousPackage = currentForegroundPackage
+                    // 무시 패키지는 포그라운드로 취급하지 않음
+                    if (packageName != null && FOREGROUND_IGNORE_PACKAGES.contains(packageName)) {
+                        Log.d(TAG, "무시 패키지 포그라운드 변경 감지됨, 상태 유지: $packageName")
+                        return
+                    }
+                    currentForegroundPackage = packageName
+                    
+                    // 카카오톡에서 다른 앱으로 변경된 경우에만 플로팅 버튼 숨김
+                    // 다른 앱에서 카카오톡으로 변경되고 키보드가 활성화된 경우는 키보드 표시 브로드캐스트에서 처리됨
+                    val isKakaoTalk = packageName == KAKAO_TALK_PACKAGE
+                    if (!isKakaoTalk && previousPackage == KAKAO_TALK_PACKAGE) {
+                        // 카카오톡에서 다른 앱으로 변경됨 - 플로팅 버튼 숨김
+                        handler.post {
+                            floatingView?.visibility = View.GONE
+                            Log.d(TAG, "카카오톡에서 다른 앱으로 변경 - 플로팅 버튼 숨김: $packageName")
+                        }
+                    } else if (isKakaoTalk && isKeyboardVisible && floatingView != null) {
+                        // 다른 앱에서 카카오톡으로 변경되고 키보드가 활성화된 경우 - 플로팅 버튼 표시
+                        handler.post {
+                            floatingView?.visibility = View.VISIBLE
+                            Log.d(TAG, "다른 앱에서 카카오톡으로 변경되고 키보드 활성화 - 플로팅 버튼 표시")
+                        }
                     }
                 }
+            }
+        }
+    }
+    
+    /**
+     * 현재 포그라운드 앱이 카카오톡인지 확인하여 플로팅 버튼 표시/숨김 제어
+     */
+    private fun updateFloatingButtonVisibility() {
+        val isKakaoTalk = currentForegroundPackage == KAKAO_TALK_PACKAGE
+        
+        handler.post {
+            if (isKakaoTalk) {
+                // 카카오톡이 실행 중이고 키보드가 보이는 경우에만 플로팅 버튼 표시
+                if (isKeyboardVisible) {
+                    if (floatingView == null && !isRemovingAnimation) {
+                        // 플로팅 버튼이 없으면 생성
+                        val keyboardHeight = KeyboardDetectionAccessibilityService.keyboardHeight
+                        val defaultInputBarHeight = (120 * resources.displayMetrics.density).toInt()
+                        onKeyboardShown(keyboardHeight, defaultInputBarHeight)
+                    } else {
+                        // 플로팅 버튼이 있으면 표시
+                        floatingView?.visibility = View.VISIBLE
+                        Log.d(TAG, "카카오톡 실행 중 - 플로팅 버튼 표시")
+                    }
+                } else {
+                    // 키보드가 안 보이면 숨김
+                    floatingView?.visibility = View.GONE
+                    Log.d(TAG, "카카오톡 실행 중이지만 키보드가 안 보임 - 플로팅 버튼 숨김")
+                }
+            } else {
+                // 카카오톡이 아니면 플로팅 버튼 숨김
+                floatingView?.visibility = View.GONE
+                Log.d(TAG, "카카오톡이 아님 - 플로팅 버튼 숨김: $currentForegroundPackage")
             }
         }
     }
@@ -471,6 +589,7 @@ class FloatingButtonService :
         val keyboardFilter = IntentFilter().apply {
             addAction(KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_SHOWN)
             addAction(KeyboardDetectionAccessibilityService.ACTION_KEYBOARD_HIDDEN)
+            addAction(KeyboardDetectionAccessibilityService.ACTION_FOREGROUND_APP_CHANGED)
         }
         
         val ocrFilter = IntentFilter().apply {
@@ -556,9 +675,15 @@ class FloatingButtonService :
     }
 
     private fun createFloatingView() {
-        if (floatingView != null) return
+        Log.d(TAG, "createFloatingView() 시작 - 현재 floatingView: $floatingView, isRemovingAnimation: $isRemovingAnimation")
+        if (floatingView != null) {
+            Log.d(TAG, "floatingView가 이미 존재하므로 생성 건너뜀")
+            return
+        }
 
+        Log.d(TAG, "setupLayoutParams() 호출 중...")
         setupLayoutParams()
+        Log.d(TAG, "setupLayoutParams() 완료")
 
         val composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingButtonService)
@@ -587,11 +712,27 @@ class FloatingButtonService :
 
         floatingView = composeView
         try {
+            Log.d(TAG, "windowManager.addView 호출 전: floatingView=$floatingView, layoutParams.x=${layoutParams.x}, layoutParams.y=${layoutParams.y}")
             windowManager.addView(floatingView, layoutParams)
+            Log.d(TAG, "windowManager.addView 성공 - 플로팅 버튼이 윈도우에 추가됨")
+            
             // 생성 후 페이드 인 및 스케일 인 애니메이션 적용
-            addFloatingViewWithAnimation(floatingView!!)
+            try {
+                addFloatingViewWithAnimation(floatingView!!)
+                Log.d(TAG, "플로팅 버튼 애니메이션 추가 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "애니메이션 추가 중 오류 발생 (플로팅 버튼은 이미 추가됨)", e)
+                // 애니메이션 추가 실패해도 플로팅 버튼은 이미 추가되었으므로 null로 설정하지 않음
+                // 단순히 표시만 하도록 함
+                floatingView?.alpha = 1f
+                floatingView?.scaleX = 1f
+                floatingView?.scaleY = 1f
+                floatingView?.visibility = View.VISIBLE
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error adding floating view", e)
+            Log.e(TAG, "예외 상세 정보: ${e.message}, ${e.stackTraceToString()}")
+            floatingView = null  // 실패 시 null로 설정하여 재시도 가능하도록
         }
     }
 
@@ -655,9 +796,19 @@ class FloatingButtonService :
         lastButtonXPosition = layoutParams.x
         lastButtonYPosition = layoutParams.y
         
-        // 애니메이션 시작 전에 상태 설정
+        // 제거할 view가 현재 floatingView와 같은지 확인
+        // 다르면 이미 새로 생성된 것이므로 null로 설정하지 않음
+        val isCurrentView = (floatingView == view)
+        Log.d(TAG, "removeFloatingViewWithAnimation 호출 - 제거할 view: $view, 현재 floatingView: $floatingView, 같은 뷰인가: $isCurrentView")
+        
+        // 애니메이션 시작 전에 상태 설정 (같은 뷰일 때만 null로 설정)
         isRemovingAnimation = true
-        floatingView = null
+        if (isCurrentView) {
+            floatingView = null
+            Log.d(TAG, "현재 floatingView를 null로 설정함")
+        } else {
+            Log.d(TAG, "다른 뷰이므로 floatingView를 null로 설정하지 않음")
+        }
         
         // 페이드 아웃 및 스케일 아웃 애니메이션
         view.animate()
@@ -670,12 +821,18 @@ class FloatingButtonService :
                 // 애니메이션 완료 후 뷰 제거
                 try {
                     windowManager.removeView(view)
-                    Log.d(TAG, "플로팅 버튼 애니메이션 완료 후 제거됨")
+                    Log.d(TAG, "플로팅 버튼 애니메이션 완료 후 제거됨 (view: $view, 현재 floatingView: $floatingView)")
                 } catch (e: Exception) {
                     Log.e(TAG, "Error removing view after animation", e)
                 } finally {
                     // 애니메이션 완료 상태로 설정
-                    isRemovingAnimation = false
+                    // 제거한 view가 현재 floatingView와 같을 때만 상태 초기화
+                    if (isCurrentView || floatingView == null) {
+                        isRemovingAnimation = false
+                        Log.d(TAG, "애니메이션 완료 - isRemovingAnimation을 false로 설정")
+                    } else {
+                        Log.d(TAG, "새로운 플로팅 버튼이 있으므로 isRemovingAnimation을 유지")
+                    }
                 }
             }
             .start()
@@ -722,12 +879,81 @@ class FloatingButtonService :
     }
 
     private fun onKeyboardShown(keyboardHeight: Int, messageInputBarHeight: Int) {
-        Log.d(TAG, "키보드 표시됨, 키보드 높이: $keyboardHeight, 입력바 높이: $messageInputBarHeight")
+        Log.d(TAG, "키보드 표시됨, 키보드 높이: $keyboardHeight, 입력바 높이: $messageInputBarHeight, 현재 포그라운드 앱: $currentForegroundPackage")
         isKeyboardVisible = true
         
-        // 플로팅 버튼이 없고 애니메이션 중이 아닐 때만 생성
-        if (floatingView == null && !isRemovingAnimation) {
-            createFloatingView()
+        // 포그라운드 앱 정보가 없으면 접근성 서비스를 통해 직접 확인
+        var foregroundPackage = currentForegroundPackage
+        if (foregroundPackage == null) {
+            val accessibilityService = KeyboardDetectionAccessibilityService.instance
+            if (accessibilityService != null) {
+                try {
+                    foregroundPackage = accessibilityService.getCurrentForegroundPackageName()
+                    if (foregroundPackage != null) {
+                        currentForegroundPackage = foregroundPackage
+                        Log.d(TAG, "접근성 서비스를 통해 포그라운드 앱 확인: $foregroundPackage")
+                    } else {
+                        Log.w(TAG, "접근성 서비스에서 포그라운드 앱을 가져올 수 없음")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "접근성 서비스에서 포그라운드 앱 확인 실패", e)
+                }
+            } else {
+                Log.w(TAG, "접근성 서비스 인스턴스가 null")
+            }
+        }
+        
+        // 카카오톡이 실행 중인지 확인
+        val isKakaoTalk = foregroundPackage == KAKAO_TALK_PACKAGE
+        
+        if (!isKakaoTalk) {
+            Log.d(TAG, "카카오톡이 아님 - 플로팅 버튼 생성하지 않음: $foregroundPackage")
+            // 카카오톡이 아니면 기존 플로팅 버튼도 숨김
+            floatingView?.visibility = View.GONE
+            return
+        }
+        
+        // 플로팅 버튼이 없을 때 생성
+        // isRemovingAnimation이 true이면 애니메이션 완료를 기다리지 않고 새로 생성
+        if (floatingView == null) {
+            Log.d(TAG, "플로팅 버튼 생성 중... (카카오톡: $isKakaoTalk, 포그라운드 앱: $foregroundPackage, isRemovingAnimation: $isRemovingAnimation)")
+            
+            // 애니메이션 중이면 상태 초기화
+            if (isRemovingAnimation) {
+                Log.d(TAG, "이전 애니메이션이 진행 중이었지만 플로팅 버튼을 다시 생성합니다")
+                isRemovingAnimation = false
+            }
+            
+            try {
+                createFloatingView()
+                
+                // 생성 후 visibility 확인
+                if (floatingView == null) {
+                    Log.e(TAG, "플로팅 버튼 생성 실패! - createFloatingView() 호출 후 floatingView가 null")
+                    // 재시도하지 않고 반환
+                    return
+                } else {
+                    Log.d(TAG, "플로팅 버튼 생성 성공! - floatingView=$floatingView")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "createFloatingView() 호출 중 예외 발생", e)
+                Log.e(TAG, "예외 상세: ${e.message}, ${e.stackTraceToString()}")
+                return
+            }
+        } else {
+            Log.d(TAG, "플로팅 버튼이 이미 존재함 - floatingView=$floatingView, isRemovingAnimation=$isRemovingAnimation")
+        }
+        
+        // 플로팅 버튼 표시
+        if (floatingView != null) {
+            try {
+                floatingView?.visibility = View.VISIBLE
+                Log.d(TAG, "플로팅 버튼 표시 완료 (visibility: ${floatingView?.visibility})")
+            } catch (e: Exception) {
+                Log.e(TAG, "플로팅 버튼 표시 중 예외 발생", e)
+            }
+        } else {
+            Log.e(TAG, "플로팅 버튼이 null이어서 표시할 수 없음 (isRemovingAnimation: $isRemovingAnimation)")
         }
         
         // 사용자가 드래그로 이동한 위치가 아닌 경우에만 키보드 높이에 맞춰 위치 조정
@@ -775,12 +1001,17 @@ class FloatingButtonService :
             val isKeyboardCurrentlyVisible = KeyboardDetectionAccessibilityService.isKeyboardVisible
             Log.d(TAG, "초기 키보드 상태 확인: $isKeyboardCurrentlyVisible")
             
-            if (isKeyboardCurrentlyVisible) {
-                // 키보드가 이미 활성화되어 있으면 플로팅 버튼 생성
+            // 카카오톡이 실행 중인지 확인
+            val isKakaoTalk = currentForegroundPackage == KAKAO_TALK_PACKAGE
+            
+            if (isKeyboardCurrentlyVisible && isKakaoTalk) {
+                // 키보드가 이미 활성화되어 있고 카카오톡이 실행 중이면 플로팅 버튼 생성
                 val keyboardHeight = KeyboardDetectionAccessibilityService.keyboardHeight
                 // 초기 상태에서는 입력바 높이를 기본값으로 사용
                 val defaultInputBarHeight = (120 * resources.displayMetrics.density).toInt()
                 onKeyboardShown(keyboardHeight, defaultInputBarHeight)
+            } else if (!isKakaoTalk) {
+                Log.d(TAG, "초기 상태 확인: 카카오톡이 아님 - 플로팅 버튼 생성 안함: $currentForegroundPackage")
             }
         } else {
             Log.d(TAG, "접근성 서비스가 아직 초기화되지 않음, 플로팅 버튼 생성 안함")

@@ -68,7 +68,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation("androidx.savedstate:savedstate")
     
-    // ML Kit OCR 의존성
+    // ML Kit OCR 의존성 (가용 최신 안정 버전)
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation("com.google.mlkit:text-recognition-korean:16.0.0")
     
