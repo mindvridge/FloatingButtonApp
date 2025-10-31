@@ -128,7 +128,7 @@ fun PermissionOverlayScreen(
         
         // 제목
         Text(
-            text = "다른 앱 위에 그리기 권한",
+            text = "🔐다른 앱 위에 그리기 권한 설정",
             fontSize = 22.sp, // 폰트 크기 감소
             fontWeight = FontWeight.Bold,
             color = Color(0xFF333333),
@@ -139,11 +139,22 @@ fun PermissionOverlayScreen(
         
         // 설명
         Text(
-            text = "플로팅 버튼을 화면에 표시하기 위해\n다른 앱 위에 그리기 권한이 필요합니다.",
+            text = "토키 버튼을 카카오톡 채팅방 화면에 표시하기 위해,\n권한 설정이 필요합니다.",
             fontSize = 14.sp, // 폰트 크기 감소
             color = Color(0xFF666666),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp // 줄 간격 감소
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp)) // 간격 추가
+        
+        // 추가 안내
+        Text(
+            text = "(*토키는 카카오톡 채팅방에서만 사용할 수 있어요)",
+            fontSize = 12.sp,
+            color = Color(0xFF999999),
+            textAlign = TextAlign.Center,
+            lineHeight = 16.sp
         )
         
         Spacer(modifier = Modifier.height(20.dp)) // 간격 대폭 감소
@@ -285,7 +296,7 @@ fun PermissionAccessibilityScreen(
         
         // 제목
         Text(
-            text = "접근성 서비스 권한",
+            text = "🔐 접근성 권한 설정",
             fontSize = 22.sp, // 폰트 크기 감소
             fontWeight = FontWeight.Bold,
             color = Color(0xFF333333),
@@ -296,14 +307,151 @@ fun PermissionAccessibilityScreen(
         
         // 설명
         Text(
-            text = "키보드 입력을 감지하고 화면을 캡처하기 위해\n접근성 서비스 권한이 필요합니다.",
+            text = "서비스 이용을 위해 접근성 권한이 필요합니다.",
             fontSize = 14.sp, // 폰트 크기 감소
             color = Color(0xFF666666),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp // 줄 간격 감소
         )
         
-        Spacer(modifier = Modifier.height(40.dp)) // 간격 증가
+        Spacer(modifier = Modifier.height(24.dp)) // 간격 증가
+        
+        // 권한 설정 순서 헤더
+        Text(
+            text = "[권한 설정 순서]",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF333333),
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 권한 설정 순서 내용
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 1단계
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "1. ",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF666666)
+                )
+                Text(
+                    text = "휴대폰 설정 > 접근성",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            // 2단계
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "2. ",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF666666)
+                )
+                Text(
+                    text = "설치된 앱",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            // 3단계
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "3. ",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF666666)
+                )
+                Text(
+                    text = "'토키' 앱",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            // 4단계
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "4. ",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF666666)
+                )
+                Text(
+                    text = "'토키 바로가기' ON",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            // 5단계
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "5. ",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF666666)
+                )
+                Text(
+                    text = "'허용' 선택",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 완료 안내
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = Color(0xFF4CAF50)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "완료 후 뒤로가기 버튼을 눌러 앱으로 돌아가기",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF4CAF50)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(20.dp)) // 간격 증가
         
         // 권한 설정/다음 단계 버튼 - UIButtons.png 사용 (가로 길이의 1/2 사이즈)
         Box(
@@ -564,9 +712,9 @@ fun InstallationCompleteScreen(
         
         Spacer(modifier = Modifier.height(30.dp)) // 간격 대폭 감소
         
-        // 중앙 일러스트레이션 - Per3Logo.png 사용
+        // 중앙 일러스트레이션 - toki_white_a.png 사용
         Image(
-            painter = painterResource(id = R.drawable.per3logo),
+            painter = painterResource(id = R.drawable.toki_white_a),
             contentDescription = "설치 완료",
             modifier = Modifier
                 .size(200.dp) // 크기 감소
@@ -578,7 +726,7 @@ fun InstallationCompleteScreen(
         
         // 제목
         Text(
-            text = "설치 완료",
+            text = "🎉 설정 완료",
             fontSize = 22.sp, // 폰트 크기 감소
             fontWeight = FontWeight.Bold,
             color = Color(0xFF333333),
@@ -589,11 +737,22 @@ fun InstallationCompleteScreen(
         
         // 설명
         Text(
-            text = "모든 설정이 완료되었습니다.\n이제 서비스를 시작할 수 있습니다.",
+            text = "이제 모든 준비가 끝났어요.",
             fontSize = 14.sp, // 폰트 크기 감소
             color = Color(0xFF666666),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp // 줄 간격 감소
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 추가 메시지
+        Text(
+            text = "대화가 막히는 순간, 당신 곁에서 함께할게요.\n토키와 함께 대화를 시작해 볼까요?",
+            fontSize = 14.sp,
+            color = Color(0xFF666666),
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
         )
         
         Spacer(modifier = Modifier.height(20.dp)) // 간격 대폭 감소
