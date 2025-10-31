@@ -46,6 +46,11 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
+        <!-- Android 15 16KB 메모리 페이지 크기 지원 -->
+        <property
+            android:name="android.app.PROPERTY_16KB_PAGE_SIZE_COMPATIBLE"
+            android:value="true" />
+
         <!-- ML Kit OCR 메타데이터 (한국어 포함) -->
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"

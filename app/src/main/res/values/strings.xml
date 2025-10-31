@@ -5,7 +5,7 @@
     <string name="accessibility_service_description">이 서비스는 키보드가 표시되는 것을 감지하여 플로팅 버튼을 자동으로 위치시키고, 화면의 텍스트를 인식하여 AI 기반 답변을 추천합니다.</string>
     
     <!-- 카카오 SDK 앱 키 (실제 앱 키로 교체 필요) -->
-    <string name="kakao_app_key">10e9fc33a657f6110da7e4e15314329a</string>
+    <string name="kakao_app_key">e30c2ee77416110e10b3539c915f42bf</string>
     
     <!-- 구글 로그인을 위한 웹 클라이언트 ID (Firebase Console에서 가져와야 함) -->
     <string name="default_web_client_id">810626497201-kn593ev4rvjb4kvl7pf90aio178nq61e.apps.googleusercontent.com</string>

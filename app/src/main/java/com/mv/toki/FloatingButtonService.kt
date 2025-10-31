@@ -39,6 +39,7 @@ import com.mv.toki.R
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistry
@@ -50,6 +51,10 @@ import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
+import com.mv.toki.ocr.OcrClassifier
+import com.mv.toki.ocr.Sender
+import com.mv.toki.ocr.ChatMessage
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -972,35 +977,70 @@ class FloatingButtonService :
             val croppedBitmap = cropStatusBarFromBitmap(bitmap)
             Log.d(TAG, "상태바 제외 후 크기: ${croppedBitmap.width}x${croppedBitmap.height}")
             
-            // InputImage 생성 (크롭된 Bitmap 사용)
-            Log.d(TAG, "InputImage 생성 중...")
-            val inputImage = InputImage.fromBitmap(croppedBitmap, 0)
-            Log.d(TAG, "InputImage 생성 완료")
-            
-            // OCR 수행
-            Log.d(TAG, "OCR 처리 시작...")
-            textRecognizer.process(inputImage)
-                .addOnSuccessListener { visionText ->
-                    Log.d(TAG, "OCR 처리 성공")
+            // 새로운 OcrClassifier를 사용하여 OCR 수행
+            lifecycleScope.launch {
+                try {
+                    Log.d(TAG, "=== OCR 처리 시작 ===")
+                    Log.d(TAG, "이미지 크기: ${croppedBitmap.width}x${croppedBitmap.height}")
                     
-                    // OCR 결과 분석 및 분류
-                    val ocrAnalysis = analyzeOcrResult(visionText)
-                    Log.d(TAG, "OCR 분석 완료: ${ocrAnalysis.textType}")
-                    Log.d(TAG, "추출된 텍스트: ${ocrAnalysis.originalText}")
+                    val visionText = OcrClassifier.recognize(croppedBitmap)
+                    Log.d(TAG, "=== OCR 인식 완료 ===")
+                    Log.d(TAG, "인식된 원본 텍스트 (ML Kit):")
+                    Log.d(TAG, visionText.text)
+                    Log.d(TAG, "텍스트 블록 수: ${visionText.textBlocks.size}")
                     
-                    if (ocrAnalysis.originalText.isNotEmpty()) {
-                        Log.d(TAG, "OCR 결과를 BottomSheet로 표시")
+                    // 위치 기반으로 발신자 분류 (개선된 로직 사용)
+                    val chatMessages = OcrClassifier.classify(visionText, croppedBitmap.width, croppedBitmap.height)
+                    Log.d(TAG, "=== 발신자 분류 완료 (개선된 로직) ===")
+                    Log.d(TAG, "분류된 메시지 수: ${chatMessages.size}개")
+                    
+                    if (chatMessages.isNotEmpty()) {
+                        // 상세한 분류 결과 로그
+                        Log.d(TAG, "=== 분류 결과 상세 ===")
+                        chatMessages.forEachIndexed { index, message ->
+                            val senderLabel = when (message.sender) {
+                                Sender.ME -> "나"
+                                Sender.OTHER -> "상대방"
+                                Sender.UNKNOWN -> "미분류"
+                            }
+                            Log.d(TAG, "메시지 $index: [$senderLabel] ${message.text}")
+                            Log.d(TAG, "  위치: left=${message.box.left}, top=${message.box.top}, right=${message.box.right}, bottom=${message.box.bottom}")
+                        }
                         
-                        // 디버깅: 처리 결과 확인 토스트
-                        val lines = ocrAnalysis.originalText.lines().filter { it.isNotBlank() }
-                        val senderLabels = lines.filter { it.startsWith("[") && it.contains("]") }
-                        val myMessages = senderLabels.count { it.startsWith("[나]") }
-                        val otherMessages = senderLabels.size - myMessages
-                        val debugMsg = "총 ${senderLabels.size}명 (나: $myMessages, 상대: $otherMessages)"
-                        Toast.makeText(this, debugMsg, Toast.LENGTH_SHORT).show()
-                        Log.d(TAG, "OCR 결과 요약: $debugMsg")
-                        Log.d(TAG, "발신자 레이블: $senderLabels")
-                        Log.d(TAG, "전체 텍스트:\n${ocrAnalysis.originalText}")
+                        // 통계 정보
+                        val myMessages = chatMessages.count { it.sender == Sender.ME }
+                        val otherMessages = chatMessages.count { it.sender == Sender.OTHER }
+                        val unknownMessages = chatMessages.count { it.sender == Sender.UNKNOWN }
+                        val debugMsg = "총 ${chatMessages.size}개 (나: $myMessages, 상대: $otherMessages, 미분류: $unknownMessages)"
+                        
+                        Log.d(TAG, "=== 분류 통계 ===")
+                        Log.d(TAG, "나의 메시지: $myMessages")
+                        Log.d(TAG, "상대방 메시지: $otherMessages")
+                        Log.d(TAG, "미분류 메시지: $unknownMessages")
+                        
+                        Toast.makeText(this@FloatingButtonService, debugMsg, Toast.LENGTH_SHORT).show()
+                        
+                        // 원본 OCR 텍스트 사용하되, 분류 결과를 기반으로 발신자 라벨 추가
+                        val originalOcrText = visionText.text
+                        Log.d(TAG, "=== 원본 OCR 텍스트 (ML Kit) ===")
+                        Log.d(TAG, originalOcrText)
+                        
+                        // 분류 결과를 기반으로 발신자 라벨이 포함된 텍스트 생성
+                        val enhancedText = enhanceOcrTextWithLabels(originalOcrText, chatMessages)
+                        Log.d(TAG, "=== 발신자 라벨 추가된 텍스트 ===")
+                        Log.d(TAG, enhancedText)
+                        
+                        // 기존 OcrAnalysis 형식으로 변환 (발신자 라벨 추가된 텍스트 사용)
+                        val ocrAnalysis = OcrAnalysis(
+                            originalText = enhancedText,  // 발신자 라벨 추가된 텍스트 사용
+                            textType = TextType.MESSAGE,
+                            language = "ko",
+                            entities = emptyList(),
+                            keywords = emptyList(),
+                            suggestions = emptyList(),
+                            confidence = 0.8f,
+                            chatAnalysis = null
+                        )
                         
                         // 분석된 OCR 결과를 BottomSheet로 표시
                         showOcrBottomSheet(ocrAnalysis)
@@ -1008,19 +1048,10 @@ class FloatingButtonService :
                         Log.d(TAG, "추출된 텍스트가 없습니다")
                         showPermissionRequestToast("텍스트를 찾을 수 없습니다.")
                     }
-                    
-                    // 원본 및 크롭된 Bitmap 메모리 해제
-                    if (!bitmap.isRecycled) {
-                        bitmap.recycle()
-                    }
-                    if (!croppedBitmap.isRecycled) {
-                        croppedBitmap.recycle()
-                    }
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "OCR 처리 실패", e)
+                } catch (e: Exception) {
+                    Log.e(TAG, "OCR 처리 중 오류", e)
                     showPermissionRequestToast("텍스트 인식에 실패했습니다.")
-                    
+                } finally {
                     // Bitmap 메모리 해제
                     if (!bitmap.isRecycled) {
                         bitmap.recycle()
@@ -1029,6 +1060,7 @@ class FloatingButtonService :
                         croppedBitmap.recycle()
                     }
                 }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "화면 캡처 결과 처리 중 오류", e)
             showPermissionRequestToast("화면 캡처 처리 중 오류가 발생했습니다.")
@@ -1111,7 +1143,7 @@ class FloatingButtonService :
         
         // 채팅 메시지 형식으로 정리 (항상 시도)
         // 이유: 텍스트 타입 분류가 부정확할 수 있으므로 항상 메시지 포맷팅 시도
-        val formattedText = formatChatMessages(visionText)
+        val formattedText = formatChatMessagesLegacy(visionText)
         Log.d(TAG, "정리된 텍스트 (길이=${formattedText.length}): ${formattedText.take(100)}...")
         
         // 채팅 분석 (항상 수행하여 상대방 이름 추출)
@@ -1139,10 +1171,85 @@ class FloatingButtonService :
     }
     
     /**
-     * 채팅 메시지를 위치 기반으로 상대방/나로 구분하여 정리
-     * 개선: 말풍선 위의 이름 블록과 말풍선을 별도로 인식
+     * 원본 OCR 텍스트에 분류 결과를 기반으로 발신자 라벨을 추가하는 함수
      */
-    private fun formatChatMessages(visionText: Text): String {
+    private fun enhanceOcrTextWithLabels(originalText: String, chatMessages: List<ChatMessage>): String {
+        if (chatMessages.isEmpty()) {
+            Log.d(TAG, "분류된 메시지가 없어서 원본 텍스트 반환")
+            return originalText
+        }
+        
+        Log.d(TAG, "=== 발신자 라벨 추가 시작 ===")
+        Log.d(TAG, "원본 텍스트 길이: ${originalText.length}")
+        Log.d(TAG, "분류된 메시지 수: ${chatMessages.size}")
+        
+        // 원본 텍스트를 라인별로 분리
+        val originalLines = originalText.split("\n").map { it.trim() }
+        val enhancedLines = mutableListOf<String>()
+        
+        // 각 분류된 메시지에 대해 원본 텍스트에서 해당하는 부분을 찾아 라벨 추가
+        for (message in chatMessages) {
+            val senderLabel = when (message.sender) {
+                Sender.ME -> "[나]"
+                Sender.OTHER -> "[상대방]"
+                Sender.UNKNOWN -> "[미분류]"
+            }
+            
+            // 메시지 텍스트가 원본 텍스트에 포함되어 있는지 확인
+            val messageText = message.text.trim()
+            val foundInOriginal = originalLines.any { line ->
+                line.contains(messageText, ignoreCase = true) || 
+                messageText.contains(line, ignoreCase = true)
+            }
+            
+            if (foundInOriginal) {
+                // 원본에서 해당 메시지를 찾아서 라벨 추가
+                val enhancedMessage = "$senderLabel\n$messageText"
+                enhancedLines.add(enhancedMessage)
+                Log.d(TAG, "라벨 추가: $enhancedMessage")
+            } else {
+                // 원본에서 찾지 못한 경우 그대로 추가
+                val enhancedMessage = "$senderLabel\n$messageText"
+                enhancedLines.add(enhancedMessage)
+                Log.d(TAG, "원본에서 찾지 못함, 그대로 추가: $enhancedMessage")
+            }
+        }
+        
+        val result = enhancedLines.joinToString("\n\n")
+        Log.d(TAG, "=== 발신자 라벨 추가 완료 ===")
+        Log.d(TAG, "결과 길이: ${result.length}")
+        
+        return result
+    }
+    
+    /**
+     * ChatMessage 리스트를 텍스트로 변환
+     */
+    private fun formatChatMessages(chatMessages: List<ChatMessage>): String {
+        Log.d(TAG, "=== 텍스트 포맷팅 시작 ===")
+        Log.d(TAG, "입력 메시지 수: ${chatMessages.size}")
+        
+        val formattedText = chatMessages.joinToString("\n\n") { message ->
+            val senderLabel = when (message.sender) {
+                Sender.ME -> "나"
+                Sender.OTHER -> "상대방"
+                Sender.UNKNOWN -> "미분류"
+            }
+            val formattedMessage = "[$senderLabel]\n${message.text}"
+            Log.d(TAG, "포맷팅: $formattedMessage")
+            formattedMessage
+        }
+        
+        Log.d(TAG, "=== 텍스트 포맷팅 완료 ===")
+        Log.d(TAG, "최종 길이: ${formattedText.length}자")
+        
+        return formattedText
+    }
+
+    /**
+     * 기존 formatChatMessages 함수 (Vision Text 기반) - 사용하지 않음
+     */
+    private fun formatChatMessagesLegacy(visionText: Text): String {
         Log.d(TAG, "=== 채팅 메시지 형식 정리 시작 (말풍선 기준) ===")
         
         val screenWidth = resources.displayMetrics.widthPixels
@@ -1880,42 +1987,22 @@ class FloatingButtonService :
     }
     
     /**
-     * 채팅 메시지 분석
+     * 채팅 메시지 분석 (간소화된 버전)
      */
     private fun analyzeChatMessage(visionText: Text, text: String): ChatAnalysis {
         Log.d(TAG, "채팅 메시지 분석 시작: $text")
         
-        // 발신자 구분
-        val sender = identifySender(visionText, text)
-        Log.d(TAG, "발신자: $sender")
-        
-        // 메시지 위치 분석
-        val position = analyzeMessagePosition(visionText)
-        Log.d(TAG, "메시지 위치: $position")
-        
-        // 시간 정보 추출
+        // 기본값으로 설정 (새로운 OcrClassifier에서 발신자 구분을 처리)
+        val sender = ChatSender.UNKNOWN
+        val position = ChatPosition.UNKNOWN
         val timeInfo = extractTimeInfo(text)
-        Log.d(TAG, "시간 정보: $timeInfo")
-        
-        // 메시지 타입 분석
         val messageType = analyzeMessageType(text)
-        Log.d(TAG, "메시지 타입: $messageType")
-        
-        // 그룹 채팅 여부 확인
         val isGroupChat = detectGroupChat(text)
-        Log.d(TAG, "그룹 채팅: $isGroupChat")
-        
-        // 참여자 목록 추출
         val participants = extractParticipants(text)
-        Log.d(TAG, "참여자: $participants")
-        
-        // 발신자 구분 신뢰도 계산
-        val confidence = calculateSenderConfidence(sender, position, text)
-        Log.d(TAG, "발신자 구분 신뢰도: $confidence")
-        
-        // 상대방 이름 추출
+        val confidence = 0.8f // 새로운 분류기는 높은 신뢰도
         val otherPersonName = extractOtherPersonName(visionText)
-        Log.d(TAG, "상대방 이름: ${otherPersonName ?: "없음"}")
+        
+        Log.d(TAG, "채팅 분석 완료 - 발신자: $sender, 상대방 이름: $otherPersonName")
         
         return ChatAnalysis(
             sender = sender,
@@ -1929,125 +2016,7 @@ class FloatingButtonService :
         )
     }
     
-    /**
-     * 발신자 구분
-     */
-    private fun identifySender(visionText: Text, text: String): ChatSender {
-        // 1. 텍스트 위치 기반 분석
-        val positionBasedSender = analyzePositionBasedSender(visionText)
-        
-        // 2. 텍스트 내용 기반 분석
-        val contentBasedSender = analyzeContentBasedSender(text)
-        
-        // 3. 시간 패턴 기반 분석
-        val timeBasedSender = analyzeTimeBasedSender(text)
-        
-        // 4. 종합 판단
-        val scores = mutableMapOf<ChatSender, Int>()
-        
-        // 위치 기반 점수
-        when (positionBasedSender) {
-            ChatSender.ME -> scores[ChatSender.ME] = (scores[ChatSender.ME] ?: 0) + 3
-            ChatSender.OTHER -> scores[ChatSender.OTHER] = (scores[ChatSender.OTHER] ?: 0) + 3
-            else -> {}
-        }
-        
-        // 내용 기반 점수
-        when (contentBasedSender) {
-            ChatSender.ME -> scores[ChatSender.ME] = (scores[ChatSender.ME] ?: 0) + 2
-            ChatSender.OTHER -> scores[ChatSender.OTHER] = (scores[ChatSender.OTHER] ?: 0) + 2
-            else -> {}
-        }
-        
-        // 시간 기반 점수
-        when (timeBasedSender) {
-            ChatSender.ME -> scores[ChatSender.ME] = (scores[ChatSender.ME] ?: 0) + 1
-            ChatSender.OTHER -> scores[ChatSender.OTHER] = (scores[ChatSender.OTHER] ?: 0) + 1
-            else -> {}
-        }
-        
-        // 최고 점수 발신자 반환
-        return scores.maxByOrNull { it.value }?.key ?: ChatSender.UNKNOWN
-    }
-    
-    /**
-     * 위치 기반 발신자 분석
-     */
-    private fun analyzePositionBasedSender(visionText: Text): ChatSender {
-        // 텍스트 블록들의 위치 분석
-        var leftSideCount = 0
-        var rightSideCount = 0
-        var centerCount = 0
-        
-        for (block in visionText.textBlocks) {
-            val boundingBox = block.boundingBox
-            if (boundingBox != null) {
-                val centerX = (boundingBox.left + boundingBox.right) / 2
-                val screenWidth = resources.displayMetrics.widthPixels
-                
-                when {
-                    centerX < screenWidth * 0.3 -> leftSideCount++
-                    centerX > screenWidth * 0.7 -> rightSideCount++
-                    else -> centerCount++
-                }
-            }
-        }
-        
-        return when {
-            rightSideCount > leftSideCount && rightSideCount > centerCount -> ChatSender.ME
-            leftSideCount > rightSideCount && leftSideCount > centerCount -> ChatSender.OTHER
-            centerCount > leftSideCount && centerCount > rightSideCount -> ChatSender.SYSTEM
-            else -> ChatSender.UNKNOWN
-        }
-    }
-    
-    /**
-     * 내용 기반 발신자 분석
-     */
-    private fun analyzeContentBasedSender(text: String): ChatSender {
-        val cleanText = text.lowercase().trim()
-        
-        // 나의 메시지 패턴
-        val myMessagePatterns = listOf(
-            "나", "내가", "저는", "제가", "우리", "우리집", "우리회사",
-            "제가", "저희", "제가", "제가", "제가", "제가"
-        )
-        
-        // 상대방 메시지 패턴
-        val otherMessagePatterns = listOf(
-            "너", "당신", "자네", "그대", "님", "씨", "선생님",
-            "어떻게", "언제", "어디서", "왜", "무엇", "뭐"
-        )
-        
-        // 시스템 메시지 패턴
-        val systemMessagePatterns = listOf(
-            "입장", "퇴장", "초대", "추방", "관리자", "알림",
-            "시스템", "봇", "자동", "공지"
-        )
-        
-        val myScore = myMessagePatterns.count { cleanText.contains(it) }
-        val otherScore = otherMessagePatterns.count { cleanText.contains(it) }
-        val systemScore = systemMessagePatterns.count { cleanText.contains(it) }
-        
-        return when {
-            systemScore > myScore && systemScore > otherScore -> ChatSender.SYSTEM
-            myScore > otherScore -> ChatSender.ME
-            otherScore > myScore -> ChatSender.OTHER
-            else -> ChatSender.UNKNOWN
-        }
-    }
-    
-    /**
-     * 시간 기반 발신자 분석
-     */
-    private fun analyzeTimeBasedSender(text: String): ChatSender {
-        // 시간 패턴 분석 (예: "오전 10:30", "14:25" 등)
-        val timePattern = Regex("(오전|오후)?\\s*\\d{1,2}:\\d{2}")
-        val hasTimeInfo = timePattern.containsMatchIn(text)
-        
-        // 시간 정보가 있으면 상대방 메시지일 가능성이 높음 (보통 상대방 메시지에 시간이 표시됨)
-        return if (hasTimeInfo) ChatSender.OTHER else ChatSender.UNKNOWN
-    }
+    // 기존 패턴 기반 발신자 구분 함수들은 제거됨 (새로운 OcrClassifier 사용)
     
     /**
      * 메시지 위치 분석

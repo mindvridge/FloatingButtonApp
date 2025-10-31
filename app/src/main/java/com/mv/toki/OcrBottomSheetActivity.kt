@@ -69,7 +69,8 @@ class OcrBottomSheetActivity : ComponentActivity() {
         val suggestions = intent.getStringArrayListExtra("suggestions") ?: intent.getStringArrayListExtra(EXTRA_SUGGESTIONS) ?: arrayListOf()
         
         // 디버깅을 위한 로그
-        Log.d("OcrBottomSheet", "받은 OCR 텍스트: '$ocrText'")
+        Log.d("OcrBottomSheet", "=== 받은 OCR 텍스트 (서버 전송용) ===")
+        Log.d("OcrBottomSheet", ocrText)
         Log.d("OcrBottomSheet", "받은 추천 답변: $suggestions")
         Log.d("OcrBottomSheet", "Intent extras: ${intent.extras?.keySet()}")
         
@@ -918,164 +919,192 @@ fun OcrBottomSheetContent(
 }
 
 
-// API를 통한 답변 생성 함수
+// API를 통한 답변 생성 함수 (토큰 만료 시 자동 재시도)
 suspend fun generateResponses(
     context: String,
     situation: String,
     length: String,
-    androidContext: android.content.Context
+    androidContext: android.content.Context,
+    maxRetries: Int = 2
 ): List<String> {
-    return try {
-        
-        // 실제 API에 맞는 요청 데이터 생성
-        val request = ReplyRequest(
-            대상자 = mapSituationToApiValue(situation), // API가 기대하는 값으로 매핑
-            답변길이 = mapLengthToApiValue(length), // API가 기대하는 값으로 매핑
-            대화내용 = context,
-            추가지침 = "" // 추가지침은 빈 문자열로 설정
-        )
-        
-        // 요청 데이터 유효성 검사
-        if (request.대상자.isBlank()) {
-            Log.e("API_DEBUG", "대상자가 비어있습니다")
-            return listOf("대상자를 선택해주세요.", "설정을 확인해주세요.", "다시 시도해주세요.")
-        }
-        if (request.답변길이.isBlank()) {
-            Log.e("API_DEBUG", "답변길이가 비어있습니다")
-            return listOf("답변길이를 선택해주세요.", "설정을 확인해주세요.", "다시 시도해주세요.")
-        }
-        if (request.대화내용.isBlank()) {
-            Log.e("API_DEBUG", "대화내용이 비어있습니다")
-            return listOf("대화내용이 없습니다.", "텍스트를 다시 캡처해주세요.", "다시 시도해주세요.")
-        }
-
-        Log.d("API_DEBUG", "=== API Request Details ===")
-        Log.d("API_DEBUG", "원본 값 - situation: '$situation', length: '$length'")
-        Log.d("API_DEBUG", "매핑된 값 - 대상자: '${request.대상자}', 답변길이: '${request.답변길이}'")
-        Log.d("API_DEBUG", "대화내용: '${request.대화내용}'")
-        Log.d("API_DEBUG", "추가지침: '${request.추가지침}'")
-        Log.d("API_DEBUG", "Full Request: $request")
-        
-        // JSON 직렬화 테스트
+    var lastError: Exception? = null
+    
+    repeat(maxRetries) { attempt ->
         try {
-            val gson = com.google.gson.Gson()
-            val jsonString = gson.toJson(request)
-            Log.d("API_DEBUG", "JSON Request: $jsonString")
-        } catch (e: Exception) {
-            Log.e("API_DEBUG", "JSON serialization failed: ${e.message}")
-        }
-        
-        // API 호출 시작 시간 기록
-        val startTime = System.currentTimeMillis()
-        Log.d("API_DEBUG", "=== API 호출 시작 ===")
-        Log.d("API_DEBUG", "시작 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(startTime))}")
-        
-        // 토큰 상태 확인은 AuthInterceptor에서 처리됨
-        Log.d("API_DEBUG", "API 호출 - AuthInterceptor가 토큰 상태를 자동으로 확인합니다")
-        
-        val response = ApiClient.geminiApi.getReplies(request)
-        
-        // API 호출 완료 시간 기록
-        val endTime = System.currentTimeMillis()
-        val responseTime = endTime - startTime
-        Log.d("API_DEBUG", "=== API 호출 완료 ===")
-        Log.d("API_DEBUG", "완료 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(endTime))}")
-        Log.d("API_DEBUG", "응답 시간: ${responseTime}ms (${responseTime / 1000.0}초)")
-        
-        Log.d("API_DEBUG", "=== API Response Details ===")
-        Log.d("API_DEBUG", "Response code: ${response.code()}")
-        Log.d("API_DEBUG", "Response successful: ${response.isSuccessful}")
-        Log.d("API_DEBUG", "Response headers: ${response.headers()}")
-        
-        if (response.isSuccessful) {
-            Log.d("API_DEBUG", "Response body: ${response.body()}")
-        } else {
-            val errorBody = response.errorBody()?.string()
-            Log.e("API_DEBUG", "Error body: $errorBody")
-            Log.e("API_DEBUG", "Error headers: ${response.headers()}")
-            Log.e("API_DEBUG", "Error message: ${response.message()}")
-        }
-        
-        if (response.isSuccessful) {
-            val responseBody = response.body()
-            val replies = extractRepliesFromResponse(responseBody)
-            replies.ifEmpty { 
-                listOf(
-                    "죄송합니다. 답변을 생성할 수 없습니다.",
-                    "다시 시도해주세요.",
-                    "잠시 후 다시 시도해주세요."
-                )
+            Log.d("API_DEBUG", "=== API 호출 시도 ${attempt + 1}/$maxRetries ===")
+            
+            // 실제 API에 맞는 요청 데이터 생성
+            val request = ReplyRequest(
+                대상자 = mapSituationToApiValue(situation), // API가 기대하는 값으로 매핑
+                답변길이 = mapLengthToApiValue(length), // API가 기대하는 값으로 매핑
+                대화내용 = context,
+                추가지침 = "" // 추가지침은 빈 문자열로 설정
+            )
+            
+            // 요청 데이터 유효성 검사
+            if (request.대상자.isBlank()) {
+                Log.e("API_DEBUG", "대상자가 비어있습니다")
+                return listOf("대상자를 선택해주세요.", "설정을 확인해주세요.", "다시 시도해주세요.")
             }
-        } else {
-            val errorMessage = response.errorBody()?.string() ?: "Unknown error"
-            Log.e("API_ERROR", "API Error: ${response.code()} - $errorMessage")
-            Log.e("API_ERROR", "Request was: $request")
+            if (request.답변길이.isBlank()) {
+                Log.e("API_DEBUG", "답변길이가 비어있습니다")
+                return listOf("답변길이를 선택해주세요.", "설정을 확인해주세요.", "다시 시도해주세요.")
+            }
+            if (request.대화내용.isBlank()) {
+                Log.e("API_DEBUG", "대화내용이 비어있습니다")
+                return listOf("대화내용이 없습니다.", "텍스트를 다시 캡처해주세요.", "다시 시도해주세요.")
+            }
+
+            Log.d("API_DEBUG", "=== API Request Details ===")
+            Log.d("API_DEBUG", "원본 값 - situation: '$situation', length: '$length'")
+            Log.d("API_DEBUG", "매핑된 값 - 대상자: '${request.대상자}', 답변길이: '${request.답변길이}'")
+            Log.d("API_DEBUG", "=== 서버로 전송되는 대화내용 ===")
+            Log.d("API_DEBUG", request.대화내용)
+            Log.d("API_DEBUG", "추가지침: '${request.추가지침}'")
+            Log.d("API_DEBUG", "Full Request: $request")
             
-            // 데이터베이스 오류 메시지 파싱
-            val userFriendlyMessage = extractUserFriendlyErrorMessage(errorMessage)
+            // JSON 직렬화 테스트
+            try {
+                val gson = com.google.gson.Gson()
+                val jsonString = gson.toJson(request)
+                Log.d("API_DEBUG", "JSON Request: $jsonString")
+            } catch (e: Exception) {
+                Log.e("API_DEBUG", "JSON serialization failed: ${e.message}")
+            }
             
-            when (response.code()) {
-                401 -> {
-                    // 토큰 만료 - 플로팅 로그인 다이얼로그 표시 필요
-                    Log.e("API_ERROR", "토큰 만료 - 플로팅 로그인 다이얼로그 표시 필요")
-                    
-                listOf(
-                    "로그인이 필요합니다.",
-                    "토큰이 만료되었습니다.",
-                    "다시 로그인해주세요."
-                )
-                }
-                422 -> {
-                    Log.e("API_DEBUG", "422 Error Details: $errorMessage")
-                    Log.e("API_DEBUG", "Request that caused 422: $request")
+            // API 호출 시작 시간 기록
+            val startTime = System.currentTimeMillis()
+            Log.d("API_DEBUG", "=== API 호출 시작 ===")
+            Log.d("API_DEBUG", "시작 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(startTime))}")
+            
+            // 토큰 상태 확인은 AuthInterceptor에서 처리됨
+            Log.d("API_DEBUG", "API 호출 - AuthInterceptor가 토큰 상태를 자동으로 확인합니다")
+            
+            val response = ApiClient.geminiApi.getReplies(request)
+            
+            // API 호출 완료 시간 기록
+            val endTime = System.currentTimeMillis()
+            val responseTime = endTime - startTime
+            Log.d("API_DEBUG", "=== API 호출 완료 ===")
+            Log.d("API_DEBUG", "완료 시간: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(endTime))}")
+            Log.d("API_DEBUG", "응답 시간: ${responseTime}ms (${responseTime / 1000.0}초)")
+            
+            Log.d("API_DEBUG", "=== API Response Details ===")
+            Log.d("API_DEBUG", "Response code: ${response.code()}")
+            Log.d("API_DEBUG", "Response successful: ${response.isSuccessful}")
+            Log.d("API_DEBUG", "Response headers: ${response.headers()}")
+            
+            if (response.isSuccessful) {
+                Log.d("API_DEBUG", "Response body: ${response.body()}")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e("API_DEBUG", "Error body: $errorBody")
+                Log.e("API_DEBUG", "Error headers: ${response.headers()}")
+                Log.e("API_DEBUG", "Error message: ${response.message()}")
+            }
+            
+            if (response.isSuccessful) {
+                val responseBody = response.body()
+                val replies = extractRepliesFromResponse(responseBody)
+                return replies.ifEmpty { 
                     listOf(
-                        "요청 데이터가 올바르지 않습니다. (422)",
-                        "오류: $errorMessage",
-                        "설정을 확인해주세요.",
-                        "대상자: ${request.대상자}, 답변길이: ${request.답변길이}"
+                        "죄송합니다. 답변을 생성할 수 없습니다.",
+                        "다시 시도해주세요.",
+                        "잠시 후 다시 시도해주세요."
                     )
                 }
-                400 -> listOf(
-                    "잘못된 요청입니다. (400)",
-                    "오류: $errorMessage",
-                    "다시 시도해주세요."
-                )
-                500 -> {
-                    // 데이터베이스 오류 로깅
-                    Log.e("API_ERROR", "서버 내부 오류 (500) 발생")
-                    Log.e("API_ERROR", "원본 오류 메시지: $errorMessage")
-                    
-                    // 데이터베이스 관련 오류인지 확인
-                    if (isDatabaseError(errorMessage)) {
-                        Log.e("API_ERROR", "데이터베이스 오류 감지됨")
-                        listOf(
-                            "일시적인 서버 문제가 발생했습니다.",
-                            "잠시 후 다시 시도해주세요.",
-                            "문제가 지속되면 고객센터에 문의해주세요."
-                        )
-                    } else {
-                        listOf(
-                            "서버 내부 오류가 발생했습니다. (500)",
-                            "잠시 후 다시 시도해주세요.",
-                            userFriendlyMessage
+            } else {
+                val errorMessage = response.errorBody()?.string() ?: "Unknown error"
+                Log.e("API_ERROR", "API Error: ${response.code()} - $errorMessage")
+                Log.e("API_ERROR", "Request was: $request")
+                
+                // 데이터베이스 오류 메시지 파싱
+                val userFriendlyMessage = extractUserFriendlyErrorMessage(errorMessage)
+                
+                when (response.code()) {
+                    401 -> {
+                        // 토큰 만료 - 재시도 가능한 오류
+                        Log.e("API_ERROR", "토큰 만료 감지 - 재시도 시도 ${attempt + 1}/$maxRetries")
+                        
+                        // 마지막 시도가 아니면 재시도
+                        if (attempt < maxRetries - 1) {
+                            Log.d("API_DEBUG", "토큰 만료로 인한 재시도 대기 중... (${attempt + 1}/$maxRetries)")
+                            kotlinx.coroutines.delay(1000) // 1초 대기 후 재시도
+                            lastError = Exception("토큰 만료 - 재시도 중")
+                            return@repeat // 다음 시도로
+                        } else {
+                            // 마지막 시도에서도 실패한 경우
+                            Log.e("API_ERROR", "토큰 만료 - 모든 재시도 실패")
+                            return listOf(
+                                "로그인이 필요합니다.",
+                                "토큰이 만료되었습니다.",
+                                "다시 로그인해주세요."
+                            )
+                        }
+                    }
+                    422 -> {
+                        Log.e("API_DEBUG", "422 Error Details: $errorMessage")
+                        Log.e("API_DEBUG", "Request that caused 422: $request")
+                        return listOf(
+                            "요청 데이터가 올바르지 않습니다. (422)",
+                            "오류: $errorMessage",
+                            "설정을 확인해주세요.",
+                            "대상자: ${request.대상자}, 답변길이: ${request.답변길이}"
                         )
                     }
+                    400 -> return listOf(
+                        "잘못된 요청입니다. (400)",
+                        "오류: $errorMessage",
+                        "다시 시도해주세요."
+                    )
+                    500 -> {
+                        // 데이터베이스 오류 로깅
+                        Log.e("API_ERROR", "서버 내부 오류 (500) 발생")
+                        Log.e("API_ERROR", "원본 오류 메시지: $errorMessage")
+                        
+                        // 데이터베이스 관련 오류인지 확인
+                        if (isDatabaseError(errorMessage)) {
+                            Log.e("API_ERROR", "데이터베이스 오류 감지됨")
+                            return listOf(
+                                "일시적인 서버 문제가 발생했습니다.",
+                                "잠시 후 다시 시도해주세요.",
+                                "문제가 지속되면 고객센터에 문의해주세요."
+                            )
+                        } else {
+                            return listOf(
+                                "서버 내부 오류가 발생했습니다. (500)",
+                                "잠시 후 다시 시도해주세요.",
+                                userFriendlyMessage
+                            )
+                        }
+                    }
+                    else -> return listOf(
+                        "서버 오류가 발생했습니다. (${response.code()})",
+                        "잠시 후 다시 시도해주세요.",
+                        userFriendlyMessage
+                    )
                 }
-                else -> listOf(
-                    "서버 오류가 발생했습니다. (${response.code()})",
-                    "잠시 후 다시 시도해주세요.",
-                    userFriendlyMessage
-                )
+            }
+        } catch (e: Exception) {
+            Log.e("API_EXCEPTION", "API Exception (시도 ${attempt + 1}/$maxRetries): ${e.message}", e)
+            lastError = e
+            
+            // 마지막 시도가 아니면 재시도
+            if (attempt < maxRetries - 1) {
+                Log.d("API_DEBUG", "예외 발생으로 인한 재시도 대기 중... (${attempt + 1}/$maxRetries)")
+                kotlinx.coroutines.delay(1000) // 1초 대기 후 재시도
+                return@repeat // 다음 시도로
             }
         }
-    } catch (e: Exception) {
-        Log.e("API_EXCEPTION", "API Exception: ${e.message}", e)
-            listOf(
-            "네트워크 오류가 발생했습니다.",
-            "오류: ${e.message}",
-            "잠시 후 다시 시도해주세요."
-        )
     }
+    
+    // 모든 재시도가 실패한 경우
+    Log.e("API_ERROR", "모든 재시도 실패 - 최종 오류: ${lastError?.message}")
+    return listOf(
+        "네트워크 오류가 발생했습니다.",
+        "오류: ${lastError?.message ?: "알 수 없는 오류"}",
+        "잠시 후 다시 시도해주세요."
+    )
 }
 
 // API 응답에서 답변 추출 함수
@@ -1131,106 +1160,32 @@ fun cleanAndFormatOcrText(rawOcrText: String): String {
     
     Log.d("OCR_CLEANUP", "원본 OCR 텍스트: $rawOcrText")
     
-    // 1. 줄바꿈으로 분할하고 정리
+    // 발신자 라벨이 이미 포함된 텍스트인지 확인
+    val hasSenderLabels = rawOcrText.contains("[상대방]") || rawOcrText.contains("[나]") || rawOcrText.contains("[미분류]")
+    
+    if (hasSenderLabels) {
+        // 발신자 라벨이 이미 포함된 경우, 그대로 반환 (추가 처리 없음)
+        Log.d("OCR_CLEANUP", "발신자 라벨이 포함된 텍스트 - 그대로 반환")
+        Log.d("OCR_CLEANUP", "최종 결과: $rawOcrText")
+        return rawOcrText
+    }
+    
+    // 발신자 라벨이 없는 경우에만 기본 필터링 수행
     val lines = rawOcrText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-    Log.d("OCR_CLEANUP", "분할된 줄들: $lines")
     
-    val messages = mutableListOf<Pair<String, String>>() // (화자, 메시지)
-    var currentSpeaker = ""
-    var currentMessage = ""
-    
-    for (line in lines) {
-        // 2. 시간 패턴 제거 (오후 4:43, 오후 4:46 등)
-        if (isTimePattern(line)) {
-            Log.d("OCR_CLEANUP", "시간 패턴 제거: $line")
-            continue
-        }
-        
-        // 3. URL 패턴 제거
-        if (isUrlPattern(line)) {
-            Log.d("OCR_CLEANUP", "URL 패턴 제거: $line")
-            continue
-        }
-        
-        // 4. 숫자만 있는 줄 제거 (1, 2, 3, 4, 5, 6, 7, 8, 9, 0 등)
-        if (isNumberOnlyPattern(line)) {
-            Log.d("OCR_CLEANUP", "숫자만 있는 줄 제거: $line")
-            continue
-        }
-        
-        // 5. 키보드 관련 텍스트 제거 (ㄷ, ㅋ, 트, 초, 요, 이, ㅠ 등)
-        if (isKeyboardPattern(line)) {
-            Log.d("OCR_CLEANUP", "키보드 패턴 제거: $line")
-            continue
-        }
-        
-        // 6. UI 관련 텍스트 제거
-        if (isUIElementPattern(line)) {
-            Log.d("OCR_CLEANUP", "UI 요소 패턴 제거: $line")
-            continue
-        }
-        
-        // 7. 화자 식별 (개선된 로직)
-        val speaker = identifySpeakerImproved(line)
-        if (speaker.isNotEmpty()) {
-            // 이전 메시지가 있으면 저장
-            if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
-                messages.add(Pair(currentSpeaker, currentMessage.trim()))
-                Log.d("OCR_CLEANUP", "메시지 저장: [$currentSpeaker] $currentMessage")
-            }
-            // 새 화자로 시작
-            currentSpeaker = speaker
-            currentMessage = extractMessageFromLine(line, speaker)
-        } else if (isValidMessage(line)) {
-            // 유효한 메시지인 경우
-            val messageOwner = identifyMessageOwner(line)
-            
-            if (messageOwner.isNotEmpty()) {
-                // 명확히 화자가 식별된 경우
-                if (currentSpeaker == messageOwner && currentMessage.isNotEmpty()) {
-                    // 같은 화자의 메시지를 연결 (줄바꿈으로 구분)
-                    currentMessage += "\n" + line
-                } else {
-                    // 다른 화자이거나 새로운 메시지인 경우
-                    if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
-                        messages.add(Pair(currentSpeaker, currentMessage.trim()))
-                        Log.d("OCR_CLEANUP", "메시지 저장: [$currentSpeaker] $currentMessage")
-                    }
-                    currentSpeaker = messageOwner
-                    currentMessage = line
-                }
-            } else if (currentSpeaker.isNotEmpty()) {
-                // 현재 화자가 있으면 같은 메시지로 병합 (여러 줄로 나뉜 메시지)
-                currentMessage += "\n" + line
-            } else {
-                // 화자를 추정해야 하는 경우
-                currentSpeaker = estimateSpeaker(line, messages)
-                currentMessage = line
-            }
-        }
+    val filteredLines = lines.filter { line ->
+        !isTimePattern(line) && 
+        !isUrlPattern(line) && 
+        !isNumberOnlyPattern(line) && 
+        !isKeyboardPattern(line) && 
+        !isUIElementPattern(line) &&
+        line.length > 3
     }
     
-    // 마지막 메시지 저장
-    if (currentSpeaker.isNotEmpty() && currentMessage.isNotEmpty()) {
-        messages.add(Pair(currentSpeaker, currentMessage.trim()))
-        Log.d("OCR_CLEANUP", "마지막 메시지 저장: [$currentSpeaker] $currentMessage")
-    }
-    
-    // 8. "상대방"을 실제 상대방 이름으로 교체
-    // 실제 상대방 이름을 찾기 (엄마, 아빠, 친구 등)
-    val actualSpeakerName = findActualSpeakerName(messages)
-    val finalMessages = messages.map { (speaker, message) ->
-        val finalSpeaker = when {
-            speaker == "상대방" && actualSpeakerName.isNotEmpty() -> actualSpeakerName
-            speaker == "상대방" -> "이름" // 실제 이름을 찾지 못한 경우 "이름"으로 표시
-            else -> speaker
-        }
-        Pair(finalSpeaker, message)
-    }
-    
-    // 9. 최종 형식으로 변환
-    val result = finalMessages.joinToString("\n") { (speaker, message) ->
-        "[$speaker] $message"
+    val result = if (filteredLines.isNotEmpty()) {
+        filteredLines.joinToString("\n")
+    } else {
+        rawOcrText
     }
     
     Log.d("OCR_CLEANUP", "최종 결과: $result")
@@ -1299,142 +1254,7 @@ private fun isValidMessage(line: String): Boolean {
            !isNumberOnlyPattern(line) && !isKeyboardPattern(line) && !isUIElementPattern(line)
 }
 
-/**
- * 개선된 화자 식별 함수
- */
-private fun identifySpeakerImproved(line: String): String {
-    // 엄마 관련 패턴
-    if (line.contains("엄마") && line.length <= 10) {
-        return "엄마"
-    }
-    
-    // 다른 일반적인 화자 패턴들
-    val speakerPatterns = listOf(
-        "아빠", "할머니", "할아버지", "언니", "누나", "형", "오빠",
-        "친구", "동생", "선생님", "회장님", "과장님", "부장님"
-    )
-    
-    for (pattern in speakerPatterns) {
-        if (line.contains(pattern) && line.length <= 15) {
-            return pattern
-        }
-    }
-    
-    return ""
-}
-
-/**
- * 메시지 내용을 분석하여 화자를 식별하는 함수
- * "나"의 메시지인지 상대방의 메시지인지 명확히 판단 가능한 경우에만 반환
- */
-private fun identifyMessageOwner(line: String): String {
-    // "나"의 전형적인 짧은 대답이나 동의 표현
-    val myPatterns = listOf(
-        Regex("^네$"), Regex("^응$"), Regex("^알겠어(요)?$"),
-        Regex("^좋아요?$"), Regex("^괜찮아요?$"), Regex("^예$"),
-        Regex(".*안가도.*되잖아$"), // "약수동 안가도 되잖아"와 같은 패턴
-        Regex(".*괜찮아요?$"), Regex(".*알겠어요?$"), Regex(".*좋아요?$")
-    )
-    
-    // 상대방의 전형적인 설명이나 요청 표현
-    val theirPatterns = listOf(
-        Regex(".*가려고.*약속했어.*"), // "원래 2일날 같이 택사시타고 가려고 약속했어"
-        Regex(".*물어보는거야$"), // "그래서 물어보는거야"
-        Regex(".*연락할[거게께]$"), // "연락해 그리고나서 연락할께"
-        Regex(".*해줘.*"), Regex(".*해봐.*"),
-        Regex(".*어때\\??"), Regex(".*할거.*")
-    )
-    
-    // "나"의 메시지 패턴 확인
-    if (myPatterns.any { it.matches(line) }) {
-        return "나"
-    }
-    
-    // 상대방의 메시지 패턴 확인
-    if (theirPatterns.any { it.matches(line) }) {
-        return "상대방"
-    }
-    
-    return "" // 명확하지 않은 경우 빈 문자열 반환
-}
-
-/**
- * 화자를 추정하는 함수 (이전 메시지 패턴 기반)
- */
-private fun estimateSpeaker(line: String, messages: List<Pair<String, String>>): String {
-    // 먼저 내용을 보고 명확히 판단 가능한 경우 먼저 처리
-    val speaker = identifyMessageOwner(line)
-    if (speaker.isNotEmpty()) {
-        return speaker
-    }
-    
-    // 이전 메시지가 있으면 마지막 화자와 반대 화자 추정
-    if (messages.isNotEmpty()) {
-        val lastSpeaker = messages.last().first
-        return when (lastSpeaker) {
-            "엄마" -> "나"
-            "나" -> "엄마"
-            "상대방" -> "나"
-            else -> "나" // 기본적으로 "나"로 추정
-        }
-    }
-    
-    // 첫 번째 메시지인 경우, 내용을 보고 추정
-    return when {
-        // "나"의 전형적인 응답 패턴
-        line.contains("네") || line.contains("알겠어요") || line.contains("좋아요") || 
-        line.contains("감사합니다") || line.contains("죄송합니다") || 
-        line.contains("연락주세요") || line.contains("괜찮아요") ||
-        line.contains("예") || line.contains("응") || line.contains("그래요") ||
-        line.contains("맞아요") || line.contains("알겠습니다") -> "나"
-        // 질문이나 요청하는 패턴은 상대방
-        line.contains("?") || line.contains("어떻게") ||
-        line.contains("가려고") || line.contains("할거") || line.contains("해줘") ||
-        line.contains("약속했어") || line.contains("물어보는거야") -> "상대방"
-        else -> "나" // 기본적으로 "나"로 추정
-    }
-}
-
-/**
- * "나"의 메시지 패턴을 더 정확히 식별하는 함수
- */
-private fun identifyMyMessage(line: String): Boolean {
-    val myMessagePatterns = listOf(
-        "네", "알겠어요", "좋아요", "감사합니다", "죄송합니다", "연락주세요",
-        "괜찮아요", "예", "응", "그래요", "맞아요", "알겠습니다", "네 알겠어요",
-        "좋아요 연락주세요", "네 감사합니다", "네 괜찮아요", "네 알겠습니다",
-        "좋습니다", "알겠어요", "네 좋아요", "네 괜찮아요"
-    )
-    
-    // 부분 일치도 확인
-    val partialPatterns = listOf(
-        "네 ", "알겠", "좋아", "감사", "죄송", "연락", "괜찮", "예", "응"
-    )
-    
-    return myMessagePatterns.any { pattern -> 
-        line.contains(pattern, ignoreCase = true) 
-    } || partialPatterns.any { pattern ->
-        line.startsWith(pattern, ignoreCase = true) && line.length <= 20
-    }
-}
-
-/**
- * 라인에서 화자를 제외한 메시지를 추출하는 함수
- */
-private fun extractMessageFromLine(line: String, speaker: String): String {
-    return line.replace(speaker, "").trim()
-}
-
-/**
- * 실제 상대방 이름을 찾는 함수
- */
-private fun findActualSpeakerName(messages: List<Pair<String, String>>): String {
-    // "나"가 아닌 첫 번째 화자 이름을 찾기
-    val actualName = messages.firstOrNull { it.first != "나" && it.first != "상대방" }?.first
-    
-    // 실제 이름이 있으면 반환, 없으면 빈 문자열 반환
-    return actualName ?: ""
-}
+// 기존 패턴 기반 화자 식별 함수들은 제거됨 (새로운 OcrClassifier 사용)
 
 /**
  * 데이터베이스 오류인지 확인하는 함수
